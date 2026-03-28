@@ -1,0 +1,44 @@
+strategy_name: monthly-dca-signal-bot
+base_monthly_rmb: 3000
+reserve_cap_multiple: 2.0
+core_ticker: SPYM
+growth_ticker: QQQM
+core_weight_normal: 0.85
+growth_weight_normal: 0.15
+feishu_enabled: false
+report_timezone: Asia/Shanghai
+
+thresholds:
+  extreme_heat:
+    drawdown_max: 0.02
+    above_sma200_multiplier: 1.15
+    rsi_min: 70
+    total_multiplier: 0.6666667
+    core_weight: 0.90
+    growth_weight: 0.10
+  heat:
+    drawdown_max: 0.05
+    above_sma200_multiplier: 1.08
+    rsi_min: 65
+    total_multiplier: 0.8333333
+    core_weight: 0.88
+    growth_weight: 0.12
+  pullback:
+    drawdown_min: 0.15
+    below_sma200: true
+    reserve_multiplier: 0.1666667
+    core_weight: 0.75
+    growth_weight: 0.25
+  deep_pullback:
+    drawdown_min: 0.25
+    rsi_max: 35
+    reserve_multiplier: 0.3333333
+    core_weight: 0.70
+    growth_weight: 0.30
+  capitulation_recovery:
+    drawdown_min: 0.35
+    above_sma20: true
+    rsi_min: 40
+    reserve_multiplier: 0.5
+    core_weight: 0.65
+    growth_weight: 0.35
