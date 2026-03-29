@@ -160,6 +160,31 @@ The workflow is designed to fail fast:
 - Report/state commit happens only on success
 - A successful run commits the generated report and updated reserve state back to the repository
 
+## Historical Signal Review
+
+Each monthly report now includes a recent month-end review table.
+
+- It shows how the current rules would have behaved on recent monthly snapshots
+- It is signal-focused and uses real fetched market history only
+- The reserve balance shown in the review is a hypothetical reconstruction from the review window start, not live production state
+
+This helps you inspect the engine without turning it into a heavy backtest.
+
+## Simulation Mode
+
+You can manually simulate a future base amount without changing the live production default.
+
+Example:
+
+```bash
+python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
+```
+
+- The live default remains `base_monthly_rmb: 3000`
+- Simulation mode is clearly labeled in the report and Feishu summary
+- Simulation mode does **not** mutate `state/reserve_state.json` by default
+- This is intended for safe inspection, not for changing production state
+
 ## Feishu Webhook
 
 Set:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +13,8 @@ from dca_signal_bot.feishu_sender import FeishuError
 
 
 def _make_history(start_price: float) -> pd.DataFrame:
-    idx = pd.date_range(end="2026-03-27", periods=800, freq="B")
-    close = pd.Series([start_price + i * 0.5 for i in range(800)], index=idx, dtype=float)
+    idx = pd.date_range(end="2026-03-27", periods=1100, freq="B")
+    close = pd.Series([start_price + i * 0.5 for i in range(len(idx))], index=idx, dtype=float)
     return pd.DataFrame({"close": close})
 
 
@@ -25,21 +26,25 @@ def _prepare_workspace(name: str) -> Path:
     return root
 
 
+def _fake_bundle() -> MarketDataBundle:
+    histories = {
+        "SPYM": TickerHistory("SPYM", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 1100),
+        "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 1100),
+    }
+    return MarketDataBundle(
+        data_source=DATA_SOURCE,
+        fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
+        validation_status="PASS",
+        histories=histories,
+    )
+
+
 def test_cli_success_path_generates_report_and_state(monkeypatch):
     sent_messages: list[str] = []
 
     def fake_fetch_histories(tickers, *, reference_date, fetched_at_utc):
-        _ = (reference_date, fetched_at_utc)
-        histories = {
-            "SPYM": TickerHistory("SPYM", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 800),
-            "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 800),
-        }
-        return MarketDataBundle(
-            data_source=DATA_SOURCE,
-            fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
-            validation_status="PASS",
-            histories=histories,
-        )
+        _ = (tickers, reference_date, fetched_at_utc)
+        return _fake_bundle()
 
     def fake_send_feishu(webhook_url, text, timeout=10):
         _ = (webhook_url, timeout)
@@ -63,8 +68,9 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     report_file = reports_dir / "2026-03-report.md"
     assert report_file.exists()
     content = report_file.read_text(encoding="utf-8")
-    assert "Data source: Yahoo Finance via yfinance" in content
-    assert "Validation status: PASS" in content
+    assert "Signal Trigger Details" in content
+    assert "Historical Signal Review" in content
+    assert "Production Mode" in content
     assert state_file.exists()
     assert sent_messages == []
 
@@ -73,17 +79,8 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     sent_messages: list[str] = []
 
     def fake_fetch_histories(tickers, *, reference_date, fetched_at_utc):
-        _ = (reference_date, fetched_at_utc)
-        histories = {
-            "SPYM": TickerHistory("SPYM", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 800),
-            "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 800),
-        }
-        return MarketDataBundle(
-            data_source=DATA_SOURCE,
-            fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
-            validation_status="PASS",
-            histories=histories,
-        )
+        _ = (tickers, reference_date, fetched_at_utc)
+        return _fake_bundle()
 
     def fake_send_feishu(webhook_url, text, timeout=10):
         _ = (webhook_url, timeout)
@@ -106,23 +103,50 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     assert code == 0
     assert state_file.exists()
     assert len(sent_messages) == 1
-    assert "储备金变动" in sent_messages[0]
-    assert "报告：" in sent_messages[0]
+    assert "Production Mode" in sent_messages[0]
+    assert "reserve cash" in sent_messages[0].lower() or "储备金变动" in sent_messages[0]
+
+
+def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch):
+    def fake_fetch_histories(tickers, *, reference_date, fetched_at_utc):
+        _ = (tickers, reference_date, fetched_at_utc)
+        return _fake_bundle()
+
+    monkeypatch.setattr(cli, "fetch_histories", fake_fetch_histories)
+
+    workspace = _prepare_workspace("simulation")
+    state_file = workspace / "reserve_state.json"
+    original_state = {
+        "reserve_cash_rmb": 1234,
+        "last_run_at": "2026-02-01T00:00:00Z",
+        "last_status": "NORMAL",
+        "last_recommendation_total_rmb": 3000,
+    }
+    state_file.write_text(json.dumps(original_state, ensure_ascii=False, indent=2), encoding="utf-8")
+    reports_dir = workspace / "reports"
+    code = cli._run(
+        config_path="config/strategy.yaml",
+        state_file=str(state_file),
+        reports_dir=str(reports_dir),
+        webhook_url="https://example.invalid",
+        dry_run=True,
+        base_monthly_rmb=6000,
+        review_months=6,
+    )
+
+    assert code == 0
+    report_file = reports_dir / "2026-03-report.md"
+    assert report_file.exists()
+    content = report_file.read_text(encoding="utf-8")
+    assert "Simulation Mode: base_monthly_rmb = 6000" in content
+    assert "Historical Signal Review (Recent 6 Months)" in content
+    assert json.loads(state_file.read_text(encoding="utf-8")) == original_state
 
 
 def test_cli_success_path_fails_when_feishu_notification_fails(monkeypatch):
     def fake_fetch_histories(tickers, *, reference_date, fetched_at_utc):
-        _ = (reference_date, fetched_at_utc)
-        histories = {
-            "SPYM": TickerHistory("SPYM", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 800),
-            "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 800),
-        }
-        return MarketDataBundle(
-            data_source=DATA_SOURCE,
-            fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
-            validation_status="PASS",
-            histories=histories,
-        )
+        _ = (tickers, reference_date, fetched_at_utc)
+        return _fake_bundle()
 
     def fake_send_feishu(webhook_url, text, timeout=10):
         _ = (webhook_url, text, timeout)

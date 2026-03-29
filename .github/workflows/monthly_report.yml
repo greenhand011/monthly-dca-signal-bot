@@ -2,6 +2,17 @@ name: Monthly DCA Report
 
 on:
   workflow_dispatch:
+    inputs:
+      base_monthly_rmb:
+        description: "Optional simulation override for the monthly base RMB"
+        required: false
+        default: ""
+        type: string
+      review_months:
+        description: "Recent month-end snapshots to include in the historical review"
+        required: false
+        default: "12"
+        type: string
   schedule:
     - cron: "0 1 1 * *"
 
@@ -39,10 +50,30 @@ jobs:
         run: |
           python -m pytest -q
 
+      - name: Detect run mode
+        id: run_mode
+        env:
+          BASE_MONTHLY_RMB_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_monthly_rmb || '' }}
+        run: |
+          if [ -n "${BASE_MONTHLY_RMB_INPUT:-}" ]; then
+            echo "simulation_mode=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "simulation_mode=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run monthly report
         id: run_monthly_report
+        env:
+          BASE_MONTHLY_RMB_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_monthly_rmb || '' }}
+          REVIEW_MONTHS_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.review_months || '12' }}
         run: |
-          python -m dca_signal_bot.cli run --config config/strategy.yaml --state-file state/reserve_state.json --reports-dir reports
+          set -euo pipefail
+          args=(python -m dca_signal_bot.cli run --config config/strategy.yaml --state-file state/reserve_state.json --reports-dir reports --review-months "${REVIEW_MONTHS_INPUT:-12}")
+          if [ -n "${BASE_MONTHLY_RMB_INPUT:-}" ]; then
+            args+=(--base-monthly-rmb "${BASE_MONTHLY_RMB_INPUT}")
+          fi
+          echo "Run mode: ${BASE_MONTHLY_RMB_INPUT:-production}"
+          "${args[@]}"
 
       - name: Upload artifacts
         if: always()
@@ -77,7 +108,7 @@ jobs:
           PY
 
       - name: Commit report and state
-        if: success()
+        if: success() && steps.run_mode.outputs.simulation_mode != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

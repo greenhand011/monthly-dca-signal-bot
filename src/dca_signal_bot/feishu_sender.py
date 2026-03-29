@@ -44,11 +44,14 @@ def build_summary_text(
     latest_market_date_spym: date,
     latest_market_date_qqqm: date,
     validation_status: str,
+    run_mode_label: str | None = None,
 ) -> str:
     _ = growth
+    mode_line = run_mode_label or "Production Mode"
     return "\n".join(
         [
             f"\u65e5\u671f\uff1a{report_date}",
+            f"\u8fd0\u884c\u6a21\u5f0f\uff1a{mode_line}",
             f"\u72b6\u6001\uff1a{decision.state_label}",
             f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
             f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
