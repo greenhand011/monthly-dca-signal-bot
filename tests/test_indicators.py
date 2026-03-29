@@ -64,6 +64,6 @@ def test_validate_price_history_raises_on_all_nan_close_series():
 
 def test_validate_price_history_raises_on_stale_data():
     idx = pd.date_range(end="2026-03-01", periods=800, freq="B")
-    history = pd.DataFrame({"Close": range(800)}, index=idx)
+    history = pd.DataFrame({"Close": range(len(idx))}, index=idx)
     with pytest.raises(MarketDataValidationError, match="too old"):
         validate_price_history(history, ticker="QQQM", reference_date=pd.Timestamp("2026-03-28").date())
