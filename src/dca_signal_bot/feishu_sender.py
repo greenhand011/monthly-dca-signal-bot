@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -16,6 +17,14 @@ class FeishuError(RuntimeError):
 @dataclass(frozen=True)
 class FeishuPayload:
     text: str
+
+
+def _log(message: str) -> None:
+    print(f"[info] {message}")
+
+
+def _warn(message: str) -> None:
+    print(f"[warn] {message}")
 
 
 def _utc_iso(dt: datetime) -> str:
@@ -44,6 +53,7 @@ def build_summary_text(
             f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
             f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
             f"{config.growth_ticker}\uff1a{decision.allocation.growth_rmb} RMB",
+            f"\u50a8\u5907\u91d1\u53d8\u52a8\uff1a{decision.reserve_delta_rmb:+d} RMB",
             f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
             f"\u6570\u636e\u6e90\uff1a{data_source}",
             f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_spym.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
@@ -73,32 +83,89 @@ def build_failure_alert_text(
     )
 
 
-def send_feishu_text(webhook_url: str, text: str, timeout: int = 10) -> None:
+def _apply_keyword_prefix(text: str) -> str:
+    keyword = os.getenv("FEISHU_KEYWORD", "").strip()
+    if not keyword:
+        return text
+    return f"{keyword}\n{text}"
+
+
+def _truncate(text: str, limit: int = 400) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 3] + "..."
+
+
+def send_feishu_text(webhook_url: str, text: str, timeout: int = 10, retries: int = 2) -> None:
     try:
         import requests
     except ImportError as exc:  # pragma: no cover - depends on environment
         raise FeishuError("requests is required to send Feishu notifications") from exc
 
-    response = requests.post(
-        webhook_url,
-        json={
-            "msg_type": "text",
-            "content": {
-                "text": text,
-            },
-        },
-        timeout=timeout,
-    )
-    if response.status_code >= 400:
-        raise FeishuError(f"Feishu webhook HTTP error: {response.status_code} {response.text}")
+    webhook_url = webhook_url.strip() if webhook_url else ""
+    if not webhook_url:
+        raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
 
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise FeishuError("Feishu webhook did not return JSON") from exc
+    outgoing_text = _apply_keyword_prefix(text)
+    _log("Feishu webhook configured: true")
+    _log("Feishu sender called: true")
+    _log(f"Feishu keyword configured: {'true' if outgoing_text != text else 'false'}")
 
-    if payload.get("code", 0) != 0:
-        raise FeishuError(f"Feishu webhook returned error payload: {payload}")
+    if retries < 1:
+        retries = 1
+
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.post(
+                webhook_url,
+                json={
+                    "msg_type": "text",
+                    "content": {
+                        "text": outgoing_text,
+                    },
+                },
+                timeout=timeout,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+            _warn(f"Feishu request attempt {attempt}/{retries} failed: {exc}")
+            if attempt >= retries:
+                raise FeishuError("Feishu webhook request failed") from exc
+            continue
+
+        _log(f"Feishu HTTP status: {response.status_code}")
+
+        if response.status_code >= 500 and attempt < retries:
+            _warn(
+                f"Feishu webhook returned HTTP {response.status_code} on attempt {attempt}/{retries}; retrying"
+            )
+            continue
+
+        if response.status_code >= 400:
+            raise FeishuError(
+                f"Feishu webhook HTTP error: {response.status_code}; body={_truncate(response.text)}"
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise FeishuError(f"Feishu webhook did not return JSON; body={_truncate(response.text)}") from exc
+
+        if not isinstance(payload, dict):
+            raise FeishuError(f"Feishu webhook returned a non-object JSON payload: {payload!r}")
+
+        if payload.get("code", 0) != 0:
+            raise FeishuError(
+                "Feishu webhook returned error payload: "
+                f"code={payload.get('code')}, msg={payload.get('msg')}, body={_truncate(response.text)}"
+            )
+
+        return
+
+    if last_error is not None:
+        raise FeishuError("Feishu webhook request failed") from last_error
 
 
 def maybe_send_feishu(
@@ -107,7 +174,12 @@ def maybe_send_feishu(
     webhook_url: str | None,
     summary_text: str,
 ) -> bool:
-    if not enabled or not webhook_url:
+    configured = bool(webhook_url and webhook_url.strip())
+    _log(f"Feishu webhook configured: {'true' if configured else 'false'}")
+    _log(f"Feishu sender called: {'true' if enabled and configured else 'false'}")
+    if not enabled:
         return False
+    if not configured:
+        raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
     send_feishu_text(webhook_url, summary_text)
     return True

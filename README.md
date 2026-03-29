@@ -166,6 +166,7 @@ Set:
 
 ```bash
 FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+FEISHU_KEYWORD=
 ```
 
 Then enable notifications in `config/strategy.yaml`:
@@ -186,6 +187,7 @@ On success, the summary includes:
 - Latest market dates
 - Validation status
 - Report path
+- Optional `FEISHU_KEYWORD` prefix if your bot requires a keyword match
 
 On failure, the bot sends only a failure alert, not a normal suggestion.
 
@@ -219,12 +221,13 @@ Common causes:
 - Missing `FEISHU_WEBHOOK_URL`
 - Invalid webhook URL
 - Webhook permission issue
+- Feishu returned a non-zero business error
 
 What to expect:
 
 - The report is still written if data validation passed
-- The normal suggestion is not blocked by Feishu failures
-- A warning is printed
+- Feishu failures are surfaced in the Actions log and the step fails
+- The report and state artifacts still remain available for inspection
 
 ### GitHub Actions permissions issue
 
@@ -252,4 +255,3 @@ Please remember:
 - Historical indicators do not predict future returns
 - ETF prices are affected by market, currency, and liquidity conditions
 - The reserve mechanism changes pacing, not risk itself
-

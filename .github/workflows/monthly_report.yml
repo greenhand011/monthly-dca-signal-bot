@@ -15,6 +15,9 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
+    env:
+      FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      FEISHU_KEYWORD: ${{ secrets.FEISHU_KEYWORD }}
 
     steps:
       - name: Checkout
@@ -37,21 +40,51 @@ jobs:
           python -m pytest -q
 
       - name: Run monthly report
-        env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        id: run_monthly_report
         run: |
           python -m dca_signal_bot.cli run --config config/strategy.yaml --state-file state/reserve_state.json --reports-dir reports
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-dca-report-${{ github.run_id }}
+          path: |
+            reports/[0-9][0-9][0-9][0-9]-[0-9][0-9]-report.md
+            state/reserve_state.json
+          if-no-files-found: ignore
+
+      - name: Send workflow failure alert
+        if: failure() && steps.run_monthly_report.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+
+          from dca_signal_bot.feishu_sender import build_failure_alert_text, send_feishu_text
+
+          webhook_url = os.getenv("FEISHU_WEBHOOK_URL", "").strip()
+          if not webhook_url:
+              raise SystemExit("FEISHU_WEBHOOK_URL is missing or blank")
+
+          text = build_failure_alert_text(
+              error="GitHub Actions failed after the report was generated.",
+              data_source="Yahoo Finance via yfinance",
+              fetched_at_utc=datetime.now(timezone.utc),
+              validation_status="FAIL",
+          )
+          send_feishu_text(webhook_url, text)
+          PY
 
       - name: Commit report and state
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/reserve_state.json reports/*.md
+          git add state/reserve_state.json reports/[0-9][0-9][0-9][0-9]-[0-9][0-9]-report.md
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           git commit -m "chore: publish monthly report"
           git push origin HEAD:main
-

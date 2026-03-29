@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from .config import load_strategy_config
 from .data_fetcher import DATA_SOURCE, DataFetchError, fetch_histories
-from .feishu_sender import build_failure_alert_text, build_summary_text, maybe_send_feishu
+from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
 from .indicators import IndicatorComputationError, compute_ticker_indicators
 from .report_renderer import render_report, report_path_for
 from .reserve_state import dump_state, load_state, utc_now_iso
@@ -41,9 +41,7 @@ def _maybe_send_failure_alert(
     if dry_run:
         return False
     if not webhook_url:
-        return False
-
-    from .feishu_sender import send_feishu_text
+        raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
 
     text = build_failure_alert_text(
         error=error,
@@ -51,6 +49,8 @@ def _maybe_send_failure_alert(
         fetched_at_utc=fetched_at_utc,
         validation_status="FAIL",
     )
+    from .feishu_sender import send_feishu_text
+
     send_feishu_text(webhook_url, text)
     return True
 
@@ -123,8 +123,9 @@ def _run(config_path: str, state_file: str, reports_dir: str, webhook_url: str |
                     webhook_url=webhook_url,
                     summary_text=summary_text,
                 )
-            except Exception as exc:
-                print(f"[warn] Feishu notification failed: {exc}")
+            except FeishuError as exc:
+                print(f"[error] Feishu notification failed: {exc}")
+                return 4
 
         print(f"Strategy: {config.strategy_name}")
         print(f"Status: {decision.state_label}")
@@ -147,6 +148,10 @@ def _run(config_path: str, state_file: str, reports_dir: str, webhook_url: str |
                 error=failure_text,
                 fetched_at_utc=fetched_at_utc,
             )
+        except FeishuError as notify_exc:
+            print(f"[error] Failure alert could not be sent: {notify_exc}")
+            print(f"[error] {failure_text}")
+            return 4
         except Exception as notify_exc:
             print(f"[warn] Failure alert could not be sent: {notify_exc}")
             failure_sent = False
