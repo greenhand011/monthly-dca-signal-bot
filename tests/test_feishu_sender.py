@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import requests
 import pytest
+import requests
 
 from dca_signal_bot.execution_guidance import ExecutionGuidance
 from dca_signal_bot.feishu_sender import FeishuError, build_summary_text, maybe_send_feishu, send_feishu_text
@@ -26,7 +26,7 @@ class _DummyResponse:
 
 
 def test_sender_raises_when_webhook_missing():
-    with pytest.raises(FeishuError, match="missing or blank"):
+    with pytest.raises(FeishuError, match="为空或未配置"):
         maybe_send_feishu(enabled=True, webhook_url="   ", summary_text="hello")
 
 
@@ -37,7 +37,7 @@ def test_sender_raises_on_non_200_response(monkeypatch):
 
     monkeypatch.setattr(requests, "post", fake_post)
 
-    with pytest.raises(FeishuError, match="HTTP error: 500"):
+    with pytest.raises(FeishuError, match="HTTP 错误：500"):
         send_feishu_text("https://example.invalid", "hello")
 
 
@@ -48,7 +48,7 @@ def test_sender_raises_on_business_error_response(monkeypatch):
 
     monkeypatch.setattr(requests, "post", fake_post)
 
-    with pytest.raises(FeishuError, match="error payload"):
+    with pytest.raises(FeishuError, match="返回业务错误"):
         send_feishu_text("https://example.invalid", "hello")
 
 
@@ -95,7 +95,7 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         allocation=AllocationBreakdown(core_rmb=2550, growth_rmb=450, core_weight=0.85, growth_weight=0.15),
         reserve_delta_rmb=0,
         reserve_cash_after_rmb=0,
-        reasons=["Baseline allocation applies."],
+        reasons=["按基线配比执行。"],
     )
     guidance = ExecutionGuidance(
         generated_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
@@ -110,8 +110,8 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         preferred_order_type="LIMIT",
         preferred_tif="DAY",
         suggest_outside_rth=True,
-        warnings=("Market orders before regular hours are risky and should not be the beginner default.",),
-        notes=("This project does not place orders automatically.",),
+        warnings=("常规时段前提交市价单风险较高，不建议作为新手默认选项。",),
+        notes=("本项目不会自动下单，也不会代替你登录 IBKR。",),
     )
     fx_summary = FxConversionSummary(
         source="Yahoo Finance via yfinance",
@@ -127,7 +127,7 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
-        note="FX conversion completed successfully.",
+        note="汇率换算完成。",
     )
 
     summary = build_summary_text(
@@ -140,13 +140,13 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         latest_market_date_core=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
         latest_market_date_qqqm=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
         validation_status="PASS",
-        run_mode_label="Production Mode",
+        run_mode_label="正式模式",
         execution_guidance=guidance,
         fx_summary=fx_summary,
     )
 
-    assert "IBKR Execution Guidance:" in summary
-    assert "USD Estimate:" in summary
-    assert "Total: 3000 RMB (~USD 416.67)" in summary
-    assert "VOO: 2550 RMB (~USD 354.17)" in summary
-    assert "QQQM: 450 RMB (~USD 62.50)" in summary
+    assert "IBKR 执行建议：" in summary
+    assert "美元估算：" in summary
+    assert "总投入：3000 RMB（约 USD 416.67）" in summary
+    assert "VOO：2550 RMB（约 USD 354.17）" in summary
+    assert "QQQM：450 RMB（约 USD 62.50）" in summary

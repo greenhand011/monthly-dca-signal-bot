@@ -92,7 +92,7 @@ def build_historical_signal_review(
         )
 
     note = (
-        f"Signal-only historical review for the most recent {len(rows)} month-end snapshots; "
-        "reserve balance is hypothetically reconstructed from the review window start at 0 RMB."
+        f"仅用于信号观察的历史回顾，覆盖最近 {len(rows)} 个按月收盘快照；"
+        "储备金余额从回顾窗口起点 0 RMB 做确定性重建，不能当作真实历史生产状态。"
     )
     return HistoricalSignalReview(months=len(rows), note=note, rows=rows)

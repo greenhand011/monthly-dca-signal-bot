@@ -52,4 +52,4 @@ def test_fx_failure_does_not_fabricate_usd_values(monkeypatch):
     assert summary.total_usd is None
     assert summary.core_usd is None
     assert summary.growth_usd is None
-    assert "USD estimate unavailable" in summary.note
+    assert "美元估算不可用" in summary.note

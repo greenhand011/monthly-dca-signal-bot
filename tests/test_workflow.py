@@ -12,13 +12,13 @@ def test_monthly_report_workflow_contains_feishu_and_artifact_steps():
     assert "schedule:" in workflow_text
     assert "FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}" in workflow_text
     assert "FEISHU_KEYWORD: ${{ secrets.FEISHU_KEYWORD }}" in workflow_text
-    assert "Detect run mode" in workflow_text
+    assert "检测运行模式" in workflow_text
     assert "simulation_mode=true" in workflow_text
     assert "--base-monthly-rmb" in workflow_text
     assert "--review-months" in workflow_text
-    assert "Upload artifacts" in workflow_text
+    assert "上传产物" in workflow_text
     assert "if: always()" in workflow_text
-    assert "Send workflow failure alert" in workflow_text
+    assert "发送工作流失败告警" in workflow_text
     assert "if: failure() && steps.run_monthly_report.outcome == 'success'" in workflow_text
     assert "if: success() && steps.run_mode.outputs.simulation_mode != 'true'" in workflow_text
     assert "git add state/reserve_state.json reports/[0-9][0-9][0-9][0-9]-[0-9][0-9]-report.md" in workflow_text

@@ -181,7 +181,7 @@ def build_fx_conversion_summary(
             total_usd=None,
             core_usd=None,
             growth_usd=None,
-            note=f"USD estimate unavailable due to FX retrieval/validation failure: {exc}",
+            note=f"由于汇率抓取或校验失败，美元估算不可用：{exc}",
         )
 
     total_usd = convert_rmb_to_usd(total_rmb, snapshot.rate_cny_per_usd)
@@ -201,11 +201,11 @@ def build_fx_conversion_summary(
         total_usd=total_usd,
         core_usd=core_usd,
         growth_usd=growth_usd,
-        note="FX conversion completed successfully.",
+        note="汇率换算完成。",
     )
 
 
 def format_rmb_usd_estimate(rmb_amount: int, usd_amount: float | None) -> str:
     if usd_amount is None:
-        return f"{rmb_amount} RMB (~USD unavailable)"
-    return f"{rmb_amount} RMB (~USD {usd_amount:.2f})"
+        return f"{rmb_amount} RMB（美元估算不可用）"
+    return f"{rmb_amount} RMB（约 USD {usd_amount:.2f}）"

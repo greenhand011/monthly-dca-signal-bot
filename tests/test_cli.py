@@ -55,7 +55,7 @@ def _fake_fx_summary() -> FxConversionSummary:
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
-        note="FX conversion completed successfully.",
+        note="汇率换算完成。",
     )
 
 
@@ -89,13 +89,13 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     report_file = reports_dir / "2026-03-report.md"
     assert report_file.exists()
     content = report_file.read_text(encoding="utf-8")
-    assert "Signal Trigger Details" in content
-    assert "IBKR Execution Guidance" in content
-    assert "FX / USD Estimates" in content
-    assert "Historical Signal Review" in content
-    assert "Production Mode" in content
+    assert "## 信号触发详情" in content
+    assert "## IBKR 执行建议" in content
+    assert "## 美元估算" in content
+    assert "## 历史信号回顾" in content
+    assert "正式模式" in content
     assert "VOO" in content
-    assert "USD 416.67" in content
+    assert "约 USD 416.67" in content
     assert state_file.exists()
     assert sent_messages == []
 
@@ -129,10 +129,10 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     assert code == 0
     assert state_file.exists()
     assert len(sent_messages) == 1
-    assert "Production Mode" in sent_messages[0]
+    assert "正式模式" in sent_messages[0]
     assert "VOO" in sent_messages[0]
-    assert "IBKR Execution Guidance" in sent_messages[0]
-    assert "USD Estimate" in sent_messages[0]
+    assert "IBKR 执行建议" in sent_messages[0]
+    assert "美元估算" in sent_messages[0]
 
 
 def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch):
@@ -167,10 +167,10 @@ def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch)
     report_file = reports_dir / "2026-03-report.md"
     assert report_file.exists()
     content = report_file.read_text(encoding="utf-8")
-    assert "Simulation Mode: base_monthly_rmb = 6000" in content
-    assert "IBKR Execution Guidance" in content
-    assert "FX / USD Estimates" in content
-    assert "Historical Signal Review (Recent 6 Months)" in content
+    assert "模拟模式：基线月投金额 = 6000" in content
+    assert "## IBKR 执行建议" in content
+    assert "## 美元估算" in content
+    assert "## 历史信号回顾（最近 6 个月）" in content
     assert "VOO" in content
     assert json.loads(state_file.read_text(encoding="utf-8")) == original_state
 
@@ -235,4 +235,4 @@ def test_cli_failure_path_sends_only_failure_alert(monkeypatch):
     assert len(sent_messages) == 1
     assert "VOO + QQQM" in sent_messages[0]
     assert "最新市场日期：N/A" in sent_messages[0]
-    assert "校验状态：FAIL" in sent_messages[0]
+    assert "校验状态：失败" in sent_messages[0]

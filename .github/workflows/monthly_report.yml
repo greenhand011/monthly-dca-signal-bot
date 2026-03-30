@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       base_monthly_rmb:
-        description: "Optional simulation override for the monthly base RMB"
+        description: "可选的模拟覆盖值，用于临时指定月度基线 RMB"
         required: false
         default: ""
         type: string
       review_months:
-        description: "Recent month-end snapshots to include in the historical review"
+        description: "历史回顾中包含的最近月末快照数量"
         required: false
         default: "12"
         type: string
@@ -50,7 +50,7 @@ jobs:
         run: |
           python -m pytest -q
 
-      - name: Detect run mode
+      - name: 检测运行模式
         id: run_mode
         env:
           BASE_MONTHLY_RMB_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_monthly_rmb || '' }}
@@ -61,7 +61,7 @@ jobs:
             echo "simulation_mode=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run monthly report
+      - name: 生成月度报告
         id: run_monthly_report
         env:
           BASE_MONTHLY_RMB_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.base_monthly_rmb || '' }}
@@ -72,10 +72,14 @@ jobs:
           if [ -n "${BASE_MONTHLY_RMB_INPUT:-}" ]; then
             args+=(--base-monthly-rmb "${BASE_MONTHLY_RMB_INPUT}")
           fi
-          echo "Run mode: ${BASE_MONTHLY_RMB_INPUT:-production}"
+          if [ -n "${BASE_MONTHLY_RMB_INPUT:-}" ]; then
+            echo "运行模式：模拟模式（基线月投金额 = ${BASE_MONTHLY_RMB_INPUT}）"
+          else
+            echo "运行模式：正式模式"
+          fi
           "${args[@]}"
 
-      - name: Upload artifacts
+      - name: 上传产物
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -85,7 +89,7 @@ jobs:
             state/reserve_state.json
           if-no-files-found: ignore
 
-      - name: Send workflow failure alert
+      - name: 发送工作流失败告警
         if: failure() && steps.run_monthly_report.outcome == 'success'
         run: |
           python - <<'PY'
@@ -99,7 +103,7 @@ jobs:
               raise SystemExit("FEISHU_WEBHOOK_URL is missing or blank")
 
           text = build_failure_alert_text(
-              error="GitHub Actions failed after the report was generated.",
+              error="GitHub Actions 在报告生成后失败。",
               data_source="Yahoo Finance via yfinance",
               fetched_at_utc=datetime.now(timezone.utc),
               core_ticker="VOO",
@@ -109,7 +113,7 @@ jobs:
           send_feishu_text(webhook_url, text)
           PY
 
-      - name: Commit report and state
+      - name: 提交报告与状态
         if: success() && steps.run_mode.outputs.simulation_mode != 'true'
         run: |
           git config user.name "github-actions[bot]"

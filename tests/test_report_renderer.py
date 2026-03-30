@@ -72,7 +72,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     decision = evaluate_strategy(config, core, growth, ReserveState(reserve_cash_rmb=200))
     review = HistoricalSignalReview(
         months=1,
-        note="signal-only historical review for 1 month",
+        note="仅用于信号观察的历史回顾，最近 1 个按月收盘快照。",
         rows=[
             HistoricalSignalReviewRow(
                 month="2026-03",
@@ -84,7 +84,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
                 reserve_cash_delta_rmb=500,
                 reserve_cash_balance_rmb=500,
                 key_trigger_summary="HEAT",
-                short_reason="QQQM is close to its 52-week high, above SMA200, and RSI is elevated.",
+                short_reason="QQQM 接近 52 周高点，位于 200 日均线上方，且 RSI 偏高。",
                 latest_market_date=pd.Timestamp("2026-03-27").date(),
             )
         ],
@@ -102,8 +102,8 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         preferred_order_type="LIMIT",
         preferred_tif="DAY",
         suggest_outside_rth=True,
-        warnings=("Market orders before regular hours are risky and should not be the beginner default.",),
-        notes=("US/Eastern is the canonical market-session clock and is converted to the configured user timezone for display.",),
+        warnings=("常规时段前提交市价单风险较高，不建议作为新手默认选项。",),
+        notes=("美国东部时间（US/Eastern）是本项目的基准交易时钟，展示时会转换到你配置的用户时区。",),
     )
     fx_summary = FxConversionSummary(
         source="Yahoo Finance via yfinance",
@@ -119,7 +119,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
-        note="FX conversion completed successfully.",
+        note="汇率换算完成。",
     )
 
     markdown = render_report(
@@ -134,25 +134,25 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         latest_market_date_core=pd.Timestamp("2026-03-27").date(),
         latest_market_date_qqqm=pd.Timestamp("2026-03-27").date(),
         validation_status="PASS",
-        run_mode_label="Simulation Mode: base_monthly_rmb = 6000",
+        run_mode_label="模拟模式：基线月投金额 = 6000",
         historical_review=review,
         execution_guidance=guidance,
         fx_summary=fx_summary,
     )
 
-    assert "Simulation Mode: base_monthly_rmb = 6000" in markdown
-    assert "## Signal Trigger Details" in markdown
-    assert "## IBKR Execution Guidance" in markdown
-    assert "## FX / USD Estimates" in markdown
-    assert "### Rule Evaluations" in markdown
-    assert "HEAT" in markdown
-    assert "YES" in markdown
-    assert "NO" in markdown
+    assert "模拟模式：基线月投金额 = 6000" in markdown
+    assert "## 信号触发详情" in markdown
+    assert "## IBKR 执行建议" in markdown
+    assert "## 美元估算" in markdown
+    assert "### 规则评估" in markdown
+    assert "过热" in markdown
+    assert "是" in markdown
+    assert "否" in markdown
     assert "final_decision_path" not in markdown
-    assert "decision_path" in markdown
-    assert "## Historical Signal Review (Recent 1 Month)" in markdown
-    assert "signal-only historical review for 1 month" in markdown
+    assert "决策路径" in markdown
+    assert "## 历史信号回顾（最近 1 个月）" in markdown
+    assert "仅用于信号观察的历史回顾" in markdown
     assert "2026-03" in markdown
-    assert "Reserve Delta" in markdown
+    assert "储备金变动" in markdown
     assert "VOO" in markdown
-    assert f"Total investment: {decision.recommendation_total_rmb} RMB (~USD 416.67)" in markdown
+    assert f"总投入：{decision.recommendation_total_rmb} RMB（约 USD 416.67）" in markdown

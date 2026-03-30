@@ -13,6 +13,7 @@ from .execution_guidance import build_execution_guidance
 from .fx_converter import build_fx_conversion_summary
 from .historical_review import build_historical_signal_review
 from .indicators import IndicatorComputationError, compute_ticker_indicators
+from .presentation import mode_label, session_label, state_label, validation_label, yes_no
 from .report_renderer import render_report, report_path_for
 from .reserve_state import dump_state, load_state, utc_now_iso
 from .strategy_engine import evaluate_strategy
@@ -92,7 +93,7 @@ def _run(
         raise ValueError("review_months must be at least 1")
     simulation_mode = base_monthly_rmb is not None and base_monthly_rmb != config.base_monthly_rmb
     run_mode_label = (
-        f"Simulation Mode: base_monthly_rmb = {effective_config.base_monthly_rmb}"
+        f"模拟模式：基线月投金额 = {effective_config.base_monthly_rmb}"
         if simulation_mode
         else None
     )
@@ -194,26 +195,26 @@ def _run(
                     summary_text=summary_text,
                 )
             except FeishuError as exc:
-                print(f"[error] Feishu notification failed: {exc}")
+                print(f"[错误] 飞书通知失败：{exc}")
                 return 4
 
-        print(f"Strategy: {effective_config.strategy_name}")
-        print(f"Run mode: {run_mode_label or 'Production Mode'}")
-        print(f"Status: {decision.state_label}")
-        print(f"Validation status: {bundle.validation_status}")
-        print(f"Data source: {bundle.data_source}")
-        print(f"Total recommendation: {decision.recommendation_total_rmb} RMB")
-        print(f"{effective_config.core_ticker}: {decision.allocation.core_rmb} RMB")
-        print(f"{effective_config.growth_ticker}: {decision.allocation.growth_rmb} RMB")
-        print(f"Reserve after run: {reserve_after_rmb} RMB")
-        print(f"FX validation status: {fx_summary.validation_status}")
+        print(f"策略：{effective_config.strategy_name}")
+        print(f"运行模式：{mode_label(run_mode_label)}")
+        print(f"状态：{state_label(decision.state_label)}")
+        print(f"校验状态：{validation_label(bundle.validation_status)}")
+        print(f"数据来源：{bundle.data_source}")
+        print(f"总投入建议：{decision.recommendation_total_rmb} RMB")
+        print(f"{effective_config.core_ticker}：{decision.allocation.core_rmb} RMB")
+        print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
+        print(f"储备金余额：{reserve_after_rmb} RMB")
+        print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(
-            "IBKR session phase: "
-            f"{execution_guidance.session_phase if execution_guidance is not None else 'disabled'}"
+            "IBKR 当前交易阶段："
+            f"{session_label(execution_guidance.session_phase) if execution_guidance is not None else '已关闭'}"
         )
-        print(f"Report written to: {report_path}")
-        print(f"State written to: {state_file if not simulation_mode else 'skipped (simulation mode)'}")
-        print(f"Feishu sent: {'yes' if feishu_sent else 'no'}")
+        print(f"报告已写入：{report_path}")
+        print(f"状态文件已写入：{state_file if not simulation_mode else '模拟模式下已跳过'}")
+        print(f"飞书已发送：{yes_no(feishu_sent)}")
         return 0
     except (DataFetchError, IndicatorComputationError) as exc:
         failure_text = str(exc)
@@ -227,17 +228,17 @@ def _run(
                 growth_ticker=config.growth_ticker,
             )
         except FeishuError as notify_exc:
-            print(f"[error] Failure alert could not be sent: {notify_exc}")
-            print(f"[error] {failure_text}")
+            print(f"[错误] 失败告警发送失败：{notify_exc}")
+            print(f"[错误] {failure_text}")
             return 4
         except Exception as notify_exc:
-            print(f"[warn] Failure alert could not be sent: {notify_exc}")
+            print(f"[警告] 失败告警发送失败：{notify_exc}")
             failure_sent = False
-        print(f"[error] {failure_text}")
-        print(f"Failure alert sent: {'yes' if failure_sent else 'no'}")
+        print(f"[错误] {failure_text}")
+        print(f"失败告警已发送：{yes_no(failure_sent)}")
         return 3
     except Exception as exc:
-        print(f"[error] Unexpected failure: {exc}")
+        print(f"[错误] 未预期失败：{exc}")
         return 1
 
 

@@ -6,6 +6,7 @@ from typing import Any
 from .config import StrategyConfig
 from .indicators import TickerIndicators
 from .reserve_state import ReserveState
+from .presentation import condition_label, rule_summary
 
 
 ACTION_NORMAL = "\u539f\u6837\u6295"
@@ -84,19 +85,19 @@ def _evaluate_extreme_heat(ind: TickerIndicators, thresholds: dict[str, Any]) ->
     rsi_threshold = float(thresholds["rsi_min"])
     conditions = [
         _condition_check(
-            label="Drawdown from 52-week high",
+            label=condition_label("Drawdown from 52-week high"),
             observed=f"{ind.drawdown_52w * 100:.2f}%",
             threshold=f"<= {drawdown_threshold * 100:.2f}%",
             passed=ind.drawdown_52w <= drawdown_threshold,
         ),
         _condition_check(
-            label="Price vs SMA200",
+            label=condition_label("Price vs SMA200"),
             observed=f"{ind.current_price:.2f} vs {ind.sma200 * sma_multiplier:.2f}",
             threshold=f"> SMA200 * {sma_multiplier:.2f}",
             passed=ind.current_price > ind.sma200 * sma_multiplier,
         ),
         _condition_check(
-            label="RSI(14)",
+            label=condition_label("RSI(14)"),
             observed=f"{ind.rsi14:.2f}",
             threshold=f">= {rsi_threshold:.2f}",
             passed=ind.rsi14 >= rsi_threshold,
@@ -105,7 +106,7 @@ def _evaluate_extreme_heat(ind: TickerIndicators, thresholds: dict[str, Any]) ->
     return _rule_evaluation(
         "EXTREME_HEAT",
         conditions,
-        "QQQM is near its 52-week high, materially above SMA200, and RSI is hot.",
+        rule_summary("QQQM is near its 52-week high, materially above SMA200, and RSI is hot."),
     )
 
 
@@ -115,19 +116,19 @@ def _evaluate_heat(ind: TickerIndicators, thresholds: dict[str, Any]) -> RuleEva
     rsi_threshold = float(thresholds["rsi_min"])
     conditions = [
         _condition_check(
-            label="Drawdown from 52-week high",
+            label=condition_label("Drawdown from 52-week high"),
             observed=f"{ind.drawdown_52w * 100:.2f}%",
             threshold=f"<= {drawdown_threshold * 100:.2f}%",
             passed=ind.drawdown_52w <= drawdown_threshold,
         ),
         _condition_check(
-            label="Price vs SMA200",
+            label=condition_label("Price vs SMA200"),
             observed=f"{ind.current_price:.2f} vs {ind.sma200 * sma_multiplier:.2f}",
             threshold=f"> SMA200 * {sma_multiplier:.2f}",
             passed=ind.current_price > ind.sma200 * sma_multiplier,
         ),
         _condition_check(
-            label="RSI(14)",
+            label=condition_label("RSI(14)"),
             observed=f"{ind.rsi14:.2f}",
             threshold=f">= {rsi_threshold:.2f}",
             passed=ind.rsi14 >= rsi_threshold,
@@ -136,7 +137,7 @@ def _evaluate_heat(ind: TickerIndicators, thresholds: dict[str, Any]) -> RuleEva
     return _rule_evaluation(
         "HEAT",
         conditions,
-        "QQQM is close to its 52-week high, above SMA200, and RSI is elevated.",
+        rule_summary("QQQM is close to its 52-week high, above SMA200, and RSI is elevated."),
     )
 
 
@@ -145,19 +146,19 @@ def _evaluate_capitulation_recovery(ind: TickerIndicators, thresholds: dict[str,
     rsi_threshold = float(thresholds["rsi_min"])
     conditions = [
         _condition_check(
-            label="Drawdown from 52-week high",
+            label=condition_label("Drawdown from 52-week high"),
             observed=f"{ind.drawdown_52w * 100:.2f}%",
             threshold=f">= {drawdown_threshold * 100:.2f}%",
             passed=ind.drawdown_52w >= drawdown_threshold,
         ),
         _condition_check(
-            label="Price vs SMA20",
+            label=condition_label("Price vs SMA20"),
             observed=f"{ind.current_price:.2f} vs {ind.sma20:.2f}",
             threshold="> SMA20",
             passed=ind.current_price > ind.sma20,
         ),
         _condition_check(
-            label="RSI(14)",
+            label=condition_label("RSI(14)"),
             observed=f"{ind.rsi14:.2f}",
             threshold=f"> {rsi_threshold:.2f}",
             passed=ind.rsi14 > rsi_threshold,
@@ -166,7 +167,7 @@ def _evaluate_capitulation_recovery(ind: TickerIndicators, thresholds: dict[str,
     return _rule_evaluation(
         "CAPITULATION_RECOVERY",
         conditions,
-        "QQQM is in a deep drawdown but has started to stabilize above SMA20 with RSI recovering.",
+        rule_summary("QQQM is in a deep drawdown but has started to stabilize above SMA20 with RSI recovering."),
     )
 
 
@@ -175,13 +176,13 @@ def _evaluate_deep_pullback(ind: TickerIndicators, thresholds: dict[str, Any]) -
     rsi_threshold = float(thresholds["rsi_max"])
     conditions = [
         _condition_check(
-            label="Drawdown from 52-week high",
+            label=condition_label("Drawdown from 52-week high"),
             observed=f"{ind.drawdown_52w * 100:.2f}%",
             threshold=f">= {drawdown_threshold * 100:.2f}%",
             passed=ind.drawdown_52w >= drawdown_threshold,
         ),
         _condition_check(
-            label="RSI(14)",
+            label=condition_label("RSI(14)"),
             observed=f"{ind.rsi14:.2f}",
             threshold=f"< {rsi_threshold:.2f}",
             passed=ind.rsi14 < rsi_threshold,
@@ -190,7 +191,7 @@ def _evaluate_deep_pullback(ind: TickerIndicators, thresholds: dict[str, Any]) -
     return _rule_evaluation(
         "DEEP_PULLBACK",
         conditions,
-        "QQQM is deeply below its 52-week high and RSI is weak.",
+        rule_summary("QQQM is deeply below its 52-week high and RSI is weak."),
     )
 
 
@@ -198,13 +199,13 @@ def _evaluate_pullback(ind: TickerIndicators, thresholds: dict[str, Any]) -> Rul
     drawdown_threshold = float(thresholds["drawdown_min"])
     conditions = [
         _condition_check(
-            label="Drawdown from 52-week high",
+            label=condition_label("Drawdown from 52-week high"),
             observed=f"{ind.drawdown_52w * 100:.2f}%",
             threshold=f">= {drawdown_threshold * 100:.2f}%",
             passed=ind.drawdown_52w >= drawdown_threshold,
         ),
         _condition_check(
-            label="Price vs SMA200",
+            label=condition_label("Price vs SMA200"),
             observed=f"{ind.current_price:.2f} vs {ind.sma200:.2f}",
             threshold="< SMA200",
             passed=ind.current_price < ind.sma200,
@@ -213,7 +214,7 @@ def _evaluate_pullback(ind: TickerIndicators, thresholds: dict[str, Any]) -> Rul
     return _rule_evaluation(
         "PULLBACK",
         conditions,
-        "QQQM is meaningfully below its 52-week high and under SMA200.",
+        rule_summary("QQQM is meaningfully below its 52-week high and under SMA200."),
     )
 
 

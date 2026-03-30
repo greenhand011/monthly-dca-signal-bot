@@ -9,6 +9,7 @@ from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
 from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
 from .indicators import TickerIndicators
+from .presentation import mode_label, order_type_label, outside_rth_label, session_label, state_label, tif_label, validation_label, yes_no
 from .strategy_engine import StrategyDecision
 
 
@@ -22,11 +23,11 @@ class FeishuPayload:
 
 
 def _log(message: str) -> None:
-    print(f"[info] {message}")
+    print(f"[信息] {message}")
 
 
 def _warn(message: str) -> None:
-    print(f"[warn] {message}")
+    print(f"[警告] {message}")
 
 
 def _utc_iso(dt: datetime) -> str:
@@ -51,11 +52,11 @@ def build_summary_text(
     fx_summary: FxConversionSummary | None = None,
 ) -> str:
     _ = growth
-    mode_line = run_mode_label or "Production Mode"
+    mode_line = mode_label(run_mode_label)
     lines = [
         f"\u65e5\u671f\uff1a{report_date}",
         f"\u8fd0\u884c\u6a21\u5f0f\uff1a{mode_line}",
-        f"\u72b6\u6001\uff1a{decision.state_label}",
+        f"\u72b6\u6001\uff1a{state_label(decision.state_label)} (`{decision.state_label}`)",
         f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
         f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
         f"{config.growth_ticker}\uff1a{decision.allocation.growth_rmb} RMB",
@@ -63,7 +64,7 @@ def build_summary_text(
         f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
         f"\u6570\u636e\u6e90\uff1a{data_source}",
         f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
-        f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
+        f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_label(validation_status)} (`{validation_status}`)",
         f"\u539f\u56e0\uff1a{decision.reasons[-1]}",
         f"\u62a5\u544a\uff1a{report_path}",
     ]
@@ -71,31 +72,31 @@ def build_summary_text(
     if execution_guidance is not None:
         lines.extend(
             [
-                "IBKR Execution Guidance:",
-                f"- Current session phase: {execution_guidance.session_phase}",
-                f"- Can submit now: {'YES' if execution_guidance.can_submit_now else 'NO'}",
-                f"- Can likely fill now: {'YES' if execution_guidance.can_likely_fill_now else 'NO'}",
-                f"- Next regular open ({execution_guidance.user_timezone}): {_format_local_dt(execution_guidance.next_regular_open)}",
-                f"- Next extended-hours opportunity ({execution_guidance.user_timezone}): {_format_local_dt(execution_guidance.next_extended_hours_opportunity)}",
-                f"- Recommended setup: {execution_guidance.preferred_order_type} / {execution_guidance.preferred_tif} / Outside RTH {'YES' if execution_guidance.suggest_outside_rth else 'NO'}",
+                "IBKR 执行建议：",
+                f"- 当前交易阶段：{session_label(execution_guidance.session_phase)}",
+                f"- 现在可提交：{yes_no(execution_guidance.can_submit_now)}",
+                f"- 现在大概率可成交：{yes_no(execution_guidance.can_likely_fill_now)}",
+                f"- 下一次常规开盘（{execution_guidance.user_timezone}）：{_format_local_dt(execution_guidance.next_regular_open)}",
+                f"- 下一次盘前/盘后可交易时段（{execution_guidance.user_timezone}）：{_format_local_dt(execution_guidance.next_extended_hours_opportunity)}",
+                f"- 建议下单设置：{order_type_label(execution_guidance.preferred_order_type)} / {tif_label(execution_guidance.preferred_tif)} / {outside_rth_label(execution_guidance.suggest_outside_rth)}",
             ]
         )
 
     if fx_summary is not None:
         lines.extend(
             [
-                "USD Estimate:",
-                f"- Total: {format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}",
-                f"- {config.core_ticker}: {format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}",
-                f"- {config.growth_ticker}: {format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}",
-                f"- FX source: {fx_summary.source}",
-                f"- FX validation status: {fx_summary.validation_status}",
+                "美元估算：",
+                f"- 总投入：{format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}",
+                f"- {config.core_ticker}：{format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}",
+                f"- {config.growth_ticker}：{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}",
+                f"- 汇率来源：{fx_summary.source}",
+                f"- 汇率校验状态：{validation_label(fx_summary.validation_status)}",
             ]
         )
         if fx_summary.rate_cny_per_usd is not None:
-            lines.append(f"- FX rate used: {fx_summary.rate_cny_per_usd:.4f} CNY per USD")
+            lines.append(f"- 使用汇率：{fx_summary.rate_cny_per_usd:.4f} CNY per USD")
         else:
-            lines.append("- USD estimate unavailable (FX data issue)")
+            lines.append("- 美元估算不可用（汇率数据问题）")
 
     return "\n".join(lines)
 
@@ -116,7 +117,7 @@ def build_failure_alert_text(
             f"\u6807\u7684\u7ec4\u5408\uff1a{core_ticker} + {growth_ticker}",
             f"\u6570\u636e\u6e90\uff1a{data_source}",
             "\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1aN/A",
-            f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
+            f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_label(validation_status)} (`{validation_status}`)",
             f"\u9519\u8bef\uff1a{error}",
         ]
     )
@@ -153,9 +154,9 @@ def send_feishu_text(webhook_url: str, text: str, timeout: int = 10, retries: in
         raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
 
     outgoing_text = _apply_keyword_prefix(text)
-    _log("Feishu webhook configured: true")
-    _log("Feishu sender called: true")
-    _log(f"Feishu keyword configured: {'true' if outgoing_text != text else 'false'}")
+    _log("飞书 Webhook 已配置：是")
+    _log("飞书发送器已调用：是")
+    _log(f"飞书关键字已配置：{yes_no(outgoing_text != text)}")
 
     if retries < 1:
         retries = 1
@@ -175,42 +176,42 @@ def send_feishu_text(webhook_url: str, text: str, timeout: int = 10, retries: in
             )
         except requests.RequestException as exc:
             last_error = exc
-            _warn(f"Feishu request attempt {attempt}/{retries} failed: {exc}")
+            _warn(f"飞书请求第 {attempt}/{retries} 次失败：{exc}")
             if attempt >= retries:
-                raise FeishuError("Feishu webhook request failed") from exc
+                raise FeishuError("飞书 Webhook 请求失败") from exc
             continue
 
-        _log(f"Feishu HTTP status: {response.status_code}")
+        _log(f"飞书 HTTP 状态：{response.status_code}")
 
         if response.status_code >= 500 and attempt < retries:
             _warn(
-                f"Feishu webhook returned HTTP {response.status_code} on attempt {attempt}/{retries}; retrying"
+                f"飞书 Webhook 在第 {attempt}/{retries} 次返回 HTTP {response.status_code}，正在重试"
             )
             continue
 
         if response.status_code >= 400:
             raise FeishuError(
-                f"Feishu webhook HTTP error: {response.status_code}; body={_truncate(response.text)}"
+                f"飞书 Webhook HTTP 错误：{response.status_code}；响应体={_truncate(response.text)}"
             )
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise FeishuError(f"Feishu webhook did not return JSON; body={_truncate(response.text)}") from exc
+            raise FeishuError(f"飞书 Webhook 未返回 JSON；响应体={_truncate(response.text)}") from exc
 
         if not isinstance(payload, dict):
-            raise FeishuError(f"Feishu webhook returned a non-object JSON payload: {payload!r}")
+            raise FeishuError(f"飞书 Webhook 返回了非对象 JSON：{payload!r}")
 
         if payload.get("code", 0) != 0:
             raise FeishuError(
-                "Feishu webhook returned error payload: "
-                f"code={payload.get('code')}, msg={payload.get('msg')}, body={_truncate(response.text)}"
+                "飞书 Webhook 返回业务错误："
+                f"code={payload.get('code')}，msg={payload.get('msg')}，响应体={_truncate(response.text)}"
             )
 
         return
 
     if last_error is not None:
-        raise FeishuError("Feishu webhook request failed") from last_error
+        raise FeishuError("飞书 Webhook 请求失败") from last_error
 
 
 def maybe_send_feishu(
@@ -220,11 +221,11 @@ def maybe_send_feishu(
     summary_text: str,
 ) -> bool:
     configured = bool(webhook_url and webhook_url.strip())
-    _log(f"Feishu webhook configured: {'true' if configured else 'false'}")
-    _log(f"Feishu sender called: {'true' if enabled and configured else 'false'}")
+    _log(f"飞书 Webhook 已配置：{yes_no(configured)}")
+    _log(f"飞书发送器已调用：{yes_no(enabled and configured)}")
     if not enabled:
         return False
     if not configured:
-        raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
+        raise FeishuError("FEISHU_WEBHOOK_URL 为空或未配置")
     send_feishu_text(webhook_url, summary_text)
     return True

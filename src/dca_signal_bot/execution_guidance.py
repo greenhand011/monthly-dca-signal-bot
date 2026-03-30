@@ -184,20 +184,20 @@ def build_execution_guidance(
     can_likely_fill_now = session_phase in {"premarket", "regular", "afterhours"}
 
     warnings = [
-        "Market orders before regular hours are risky and should not be the beginner default.",
-        "A DAY order is not good forever.",
-        "This project does not place orders automatically.",
+        "常规时段前提交市价单风险较高，不建议作为新手默认选项。",
+        "当日有效（DAY）并不代表永久有效。",
+        "本项目不会自动下单，也不会代替你登录 IBKR。",
     ]
     if session_phase == "overnight":
-        warnings.append("Overnight trading availability is limited and symbol-dependent; do not overstate support.")
+        warnings.append("夜盘可交易性受标的与会话限制影响较大，不要默认认为所有品种都支持。")
     if session_phase == "closed":
-        warnings.append("The market is closed; an order may queue until the next eligible session.")
+        warnings.append("当前休市，订单可能会排队等待下一次可交易时段。")
     if session_phase != "regular":
-        warnings.append("Use Outside RTH only if your IBKR setup and symbol support it.")
+        warnings.append("是否允许常规时段外成交，请以 IBKR 设置和标的支持情况为准。")
 
     notes = [
-        "US/Eastern is the canonical market-session clock and is converted to the configured user timezone for display.",
-        f"Session timestamps are shown in {user_tz.key if hasattr(user_tz, 'key') else user_timezone}; DST is handled by zoneinfo.",
+        "美国东部时间（US/Eastern）是本项目的基准交易时钟，展示时会转换到你配置的用户时区。",
+        f"时间戳会按 {user_tz.key if hasattr(user_tz, 'key') else user_timezone} 显示，夏令时由 zoneinfo 自动处理。",
     ]
 
     return ExecutionGuidance(

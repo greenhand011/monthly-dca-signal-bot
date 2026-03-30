@@ -1,81 +1,84 @@
-# monthly-dca-signal-bot Example Report
+# monthly-dca-signal-bot 月度定投报告
 
-> This is a sample layout only. It is not live market output.
+> 这只是版式示例，不是实时行情输出。
 
-**Date**: 2026-03-28  
-**Run Mode**: `Production Mode`  
-**Market Status**: `NORMAL`
+**日期**：2026-03-28  
+**运行模式**：`正式模式`  
+**当前市场状态**：`正常执行 (NORMAL)`
 
-## Data Information
+## 数据信息
 
-- Data source: Yahoo Finance via yfinance
-- Data fetched at (UTC): 2026-03-28T03:15:20Z
-- Latest market date for VOO: 2026-03-27
-- Latest market date for QQQM: 2026-03-27
-- Validation status: PASS
+- 数据来源：Yahoo Finance via yfinance
+- 数据抓取时间（UTC）：2026-03-28T03:15:20Z
+- VOO 最新市场日期：2026-03-27
+- QQQM 最新市场日期：2026-03-27
+- 校验状态：通过 (`PASS`)
 
-## IBKR Execution Guidance
+## IBKR 执行建议
 
-- Current session phase (US/Eastern): `regular`
-- Can submit now: `YES`
-- Can likely fill now: `YES`
-- Next regular open (Asia/Tokyo): `2026-03-29 22:30 JST`
-- Next extended-hours opportunity (Asia/Tokyo): `2026-03-28 05:00 JST`
-- Recommended setup: Order Type `LIMIT`, Time in Force `DAY`, Outside RTH `YES`
+- 当前交易阶段（US/Eastern）：`常规时段`
+- 现在可提交：`是`
+- 现在大概率可成交：`是`
+- 下一次常规开盘（Asia/Tokyo）：`2026-03-29 22:30 JST`
+- 下一次盘前/盘后可交易时段（Asia/Tokyo）：`2026-03-28 05:00 JST`
+- 建议下单设置：`限价单` / `当日有效` / `允许常规时段外成交：是`
 
-### Warnings / Notes
+### 风险与说明
 
-- Market orders before regular hours are risky and should not be the beginner default.
-- A DAY order is not good forever.
-- This project does not place orders automatically.
+- 常规时段前提交市价单风险较高，不建议作为新手默认选项。
+- 当日有效（DAY）并不代表永久有效。
+- 本项目不会自动下单，也不会代替你登录 IBKR。
 
-## FX / USD Estimates
+## 美元估算
 
-- FX source: Yahoo Finance via yfinance
-- FX pair: CNY=X (CNY per USD)
-- FX fetched at (UTC): 2026-03-28T03:15:20Z
-- FX rate used: `7.2000 CNY per USD`
-- FX validation status: PASS
-- Total investment: 3000 RMB (~USD 416.67)
-- VOO core allocation: 2550 RMB (~USD 354.17)
-- QQQM growth allocation: 450 RMB (~USD 62.50)
+- 汇率来源：Yahoo Finance via yfinance
+- 汇率标的：`CNY=X`（CNY per USD）
+- 汇率抓取时间（UTC）：2026-03-28T03:15:20Z
+- 使用汇率：`7.2000 CNY per USD`
+- 汇率校验状态：通过 (`PASS`)
+- 总投入：`3000 RMB（约 USD 416.67）`
+- VOO：`2550 RMB（约 USD 354.17）`
+- QQQM：`450 RMB（约 USD 62.50）`
 
-## Market Data
+## 市场数据
 
-- VOO current price: `512.34`
-- QQQM current price: `468.12`
-- QQQM 52-week drawdown: `8.40%`
-- QQQM deviation from 200-day SMA: `-1.25%`
-- QQQM RSI(14): `54.80`
-- VOO 3-year price percentile: `61.20%`
-- QQQM 3-year price percentile: `58.90%`
-- Current reserve cash: `0 RMB`
+- VOO 当前价格：`512.34`
+- QQQM 当前价格：`468.12`
+- QQQM 52 周高点：`511.21`
+- QQQM 距 52 周高点回撤：`8.40%`
+- QQQM 相对 200 日均线偏离：`-1.25%`
+- QQQM 200 日均线：`474.05`
+- QQQM RSI(14)：`54.80`
+- VOO 3 年价格分位：`61.20%`
+- QQQM 3 年价格分位：`58.90%`
+- 当前储备金余额：`0 RMB`
+- 储备金变动：`+0 RMB`
 
-## Signal Trigger Details
+## 信号触发详情
 
-### Current Asset Snapshot
+### 当前资产快照
 
-| Ticker | Current Price | 52W High | Drawdown | SMA200 | Dist. vs SMA200 | RSI(14) | 3Y Percentile |
+| 标的 | 当前价格 | 52 周高点 | 回撤 | 200 日均线 | 200 日均线偏离 | RSI(14) | 3 年分位 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | VOO | 512.34 | 520.00 | 1.47% | 500.12 | 2.44% | 61.20 | 61.20% |
 | QQQM | 468.12 | 511.21 | 8.40% | 474.05 | -1.25% | 54.80 | 58.90% |
 
-### Rule Evaluations
+### 规则评估
 
-| Rule | Triggered | Condition checks | Summary |
+| 规则 | 是否触发 | 条件检查 | 说明 |
 | --- | --- | --- | --- |
-| EXTREME_HEAT | NO | Drawdown from 52-week high: NO<br>Price vs SMA200: NO<br>RSI(14): NO | QQQM is near its 52-week high, materially above SMA200, and RSI is hot. |
-| HEAT | NO | Drawdown from 52-week high: NO<br>Price vs SMA200: NO<br>RSI(14): NO | QQQM is close to its 52-week high, above SMA200, and RSI is elevated. |
-| CAPITULATION_RECOVERY | NO | Drawdown from 52-week high: NO<br>Price vs SMA20: NO<br>RSI(14): NO | QQQM is in a deep drawdown but has started to stabilize above SMA20 with RSI recovering. |
-| DEEP_PULLBACK | NO | Drawdown from 52-week high: NO<br>RSI(14): NO | QQQM is deeply below its 52-week high and RSI is weak. |
-| PULLBACK | NO | Drawdown from 52-week high: NO<br>Price vs SMA200: YES | QQQM is meaningfully below its 52-week high and under SMA200. |
+| 极热 | 否 | 距 52 周高点回撤：否<br>价格 vs 200 日均线：否<br>RSI(14)：否 | QQQM 接近 52 周高点，显著高于 200 日均线，且 RSI 偏热。 |
+| 过热 | 否 | 距 52 周高点回撤：否<br>价格 vs 200 日均线：否<br>RSI(14)：否 | QQQM 接近 52 周高点，位于 200 日均线上方，且 RSI 偏高。 |
+| 止跌回升 | 否 | 距 52 周高点回撤：否<br>价格 vs 20 日均线：否<br>RSI(14)：否 | QQQM 处于深度回撤中，但已重新站上 20 日均线且 RSI 开始修复。 |
+| 深度回撤 | 否 | 距 52 周高点回撤：否<br>RSI(14)：否 | QQQM 距 52 周高点回撤较深，且 RSI 偏弱。 |
+| 回撤 | 否 | 距 52 周高点回撤：否<br>价格 vs 200 日均线：是 | QQQM 已明显跌破 52 周高点，且位于 200 日均线下方。 |
 
-### Decision Path
+### 决策路径
 
-- triggered_rule: `NORMAL`
-- decision_path: `EXTREME_HEAT:NO -> HEAT:NO -> CAPITULATION_RECOVERY:NO -> DEEP_PULLBACK:NO -> PULLBACK:NO => NORMAL`
-- triggered_rules: `[]`
-- non_triggered_rules: `EXTREME_HEAT, HEAT, CAPITULATION_RECOVERY, DEEP_PULLBACK, PULLBACK`
+- 触发规则：`NORMAL`
+- 决策路径：`EXTREME_HEAT:NO -> HEAT:NO -> CAPITULATION_RECOVERY:NO -> DEEP_PULLBACK:NO -> PULLBACK:NO => NORMAL`
+- 已触发规则：`无`
+- 未触发规则：`极热, 过热, 止跌回升, 深度回撤, 回撤`
 
 ## 本月建议
 
@@ -88,8 +91,8 @@
 ### 原因说明
 
 - QQQM 当前价格 468.12
-- 52 周回撤 8.40%
-- 200 日偏离 -1.25%
+- 距 52 周高点回撤 8.40%
+- 相对 200 日均线偏离 -1.25%
 - RSI(14) 54.80
 - 未同时满足更强的热度或回撤条件，按基线配比执行。
 
@@ -101,13 +104,23 @@
 
 ### 下次查看建议
 
-建议在下个月首个交易日或下一次月度运行时再次查看；如果 QQQM 的价格结构发生明显变化，也可以提前复核。
+建议在下一个月首个交易日或下一次月度运行时再次查看；如果 QQQM 的价格结构发生明显变化，也可以提前复核。
 
-## Historical Signal Review (Recent 12 Months)
+## 历史信号回顾（最近 12 个月）
 
-> Signal-only historical review for the most recent 12 month-end snapshots; reserve balance is hypothetically reconstructed from the review window start at 0 RMB.
+> 仅用于信号观察的历史回顾，覆盖最近 12 个按月收盘快照；储备金余额从回顾窗口起点 0 RMB 做确定性重建，不能当作真实历史生产状态。
 
-| Month | Status | Base RMB | Suggested Total | VOO | QQQM | Reserve Delta | Reserve Balance | Trigger | Reason |
+| 月份 | 状态 | 基线金额 | 建议总投入 | VOO | QQQM | 储备金变动 | 储备金余额 | 触发项 | 原因 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| 2025-04 | NORMAL | 3000 | 3000 | 2550 | 450 | +0 | 0 | NORMAL | Baseline allocation applies. |
-| 2025-05 | HEAT | 3000 | 2500 | 2200 | 300 | +500 | 500 | HEAT | QQQM is close to its 52-week high, above SMA200, and RSI is elevated. |
+| 2025-04 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 0 | 正常执行 | 按基线配比执行。 |
+| 2025-05 | 过热 | 3000 | 2500 | 2200 | 300 | +500 | 500 | 过热 | QQQM 接近 52 周高点，位于 200 日均线上方，且 RSI 偏高。 |
+| 2025-06 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 500 | 正常执行 | 按基线配比执行。 |
+| 2025-07 | 深度回撤 | 3000 | 3200 | 2400 | 800 | -200 | 300 | 深度回撤 | QQQM 距 52 周高点明显回撤且 RSI 偏弱，动用部分储备金加投。 |
+| 2025-08 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 300 | 正常执行 | 按基线配比执行。 |
+| 2025-09 | 过热 | 3000 | 2500 | 2200 | 300 | +500 | 800 | 过热 | QQQM 接近 52 周高点，位于 200 日均线上方，且 RSI 偏高。 |
+| 2025-10 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
+| 2025-11 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
+| 2025-12 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
+| 2026-01 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
+| 2026-02 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
+| 2026-03 | 正常执行 | 3000 | 3000 | 2550 | 450 | +0 | 800 | 正常执行 | 按基线配比执行。 |
