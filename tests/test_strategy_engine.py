@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 
 from dca_signal_bot.config import load_strategy_config
@@ -135,3 +137,35 @@ def test_deep_pullback_uses_reserve_when_available():
     assert result.recommendation_total_rmb == 3600
     assert result.reserve_delta_rmb == -600
     assert result.reserve_cash_after_rmb == 0
+
+
+def test_execution_guidance_settings_do_not_change_strategy_outputs():
+    config = load_strategy_config("config/strategy.yaml")
+    growth = _indicator(
+        current_price=104.0,
+        high_52w=110.0,
+        drawdown_52w=0.0545,
+        sma200=108.0,
+        deviation_from_sma200=-0.0370,
+        sma20=105.0,
+        deviation_from_sma20=-0.0095,
+        rsi14=51.0,
+        price_percentile_3y=42.0,
+    )
+
+    baseline = evaluate_strategy(config, _core_indicator(), growth, ReserveState(reserve_cash_rmb=100))
+    guidance_enabled = evaluate_strategy(
+        replace(
+            config,
+            execution_guidance_enabled=True,
+            user_timezone="Asia/Tokyo",
+            preferred_order_type="LIMIT",
+            preferred_tif="DAY",
+            suggest_outside_rth=True,
+        ),
+        _core_indicator(),
+        growth,
+        ReserveState(reserve_cash_rmb=100),
+    )
+
+    assert guidance_enabled == baseline

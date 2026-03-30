@@ -10,6 +10,7 @@ import pandas as pd
 from dca_signal_bot import cli
 from dca_signal_bot.data_fetcher import DATA_SOURCE, DataFetchError, MarketDataBundle, TickerHistory
 from dca_signal_bot.feishu_sender import FeishuError
+from dca_signal_bot.fx_converter import FxConversionSummary
 
 
 def _make_history(start_price: float) -> pd.DataFrame:
@@ -39,6 +40,25 @@ def _fake_bundle() -> MarketDataBundle:
     )
 
 
+def _fake_fx_summary() -> FxConversionSummary:
+    return FxConversionSummary(
+        source="Yahoo Finance via yfinance",
+        pair_ticker="CNY=X",
+        pair_description="CNY per USD",
+        fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
+        latest_market_date=pd.Timestamp("2026-03-27").date(),
+        validation_status="PASS",
+        rate_cny_per_usd=7.2,
+        total_rmb=3000,
+        core_rmb=2550,
+        growth_rmb=450,
+        total_usd=416.67,
+        core_usd=354.17,
+        growth_usd=62.5,
+        note="FX conversion completed successfully.",
+    )
+
+
 def test_cli_success_path_generates_report_and_state(monkeypatch):
     sent_messages: list[str] = []
 
@@ -51,6 +71,7 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
         sent_messages.append(text)
 
     monkeypatch.setattr(cli, "fetch_histories", fake_fetch_histories)
+    monkeypatch.setattr(cli, "build_fx_conversion_summary", lambda **kwargs: _fake_fx_summary())
     monkeypatch.setattr("dca_signal_bot.feishu_sender.send_feishu_text", fake_send_feishu)
 
     workspace = _prepare_workspace("success")
@@ -69,9 +90,12 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     assert report_file.exists()
     content = report_file.read_text(encoding="utf-8")
     assert "Signal Trigger Details" in content
+    assert "IBKR Execution Guidance" in content
+    assert "FX / USD Estimates" in content
     assert "Historical Signal Review" in content
     assert "Production Mode" in content
     assert "VOO" in content
+    assert "USD 416.67" in content
     assert state_file.exists()
     assert sent_messages == []
 
@@ -88,6 +112,7 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
         sent_messages.append(text)
 
     monkeypatch.setattr(cli, "fetch_histories", fake_fetch_histories)
+    monkeypatch.setattr(cli, "build_fx_conversion_summary", lambda **kwargs: _fake_fx_summary())
     monkeypatch.setattr("dca_signal_bot.feishu_sender.send_feishu_text", fake_send_feishu)
 
     workspace = _prepare_workspace("success-send")
@@ -106,6 +131,8 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     assert len(sent_messages) == 1
     assert "Production Mode" in sent_messages[0]
     assert "VOO" in sent_messages[0]
+    assert "IBKR Execution Guidance" in sent_messages[0]
+    assert "USD Estimate" in sent_messages[0]
 
 
 def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch):
@@ -114,6 +141,7 @@ def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch)
         return _fake_bundle()
 
     monkeypatch.setattr(cli, "fetch_histories", fake_fetch_histories)
+    monkeypatch.setattr(cli, "build_fx_conversion_summary", lambda **kwargs: _fake_fx_summary())
 
     workspace = _prepare_workspace("simulation")
     state_file = workspace / "reserve_state.json"
@@ -140,6 +168,8 @@ def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch)
     assert report_file.exists()
     content = report_file.read_text(encoding="utf-8")
     assert "Simulation Mode: base_monthly_rmb = 6000" in content
+    assert "IBKR Execution Guidance" in content
+    assert "FX / USD Estimates" in content
     assert "Historical Signal Review (Recent 6 Months)" in content
     assert "VOO" in content
     assert json.loads(state_file.read_text(encoding="utf-8")) == original_state
@@ -155,6 +185,7 @@ def test_cli_success_path_fails_when_feishu_notification_fails(monkeypatch):
         raise FeishuError("Feishu webhook HTTP error: 400 bad request")
 
     monkeypatch.setattr(cli, "fetch_histories", fake_fetch_histories)
+    monkeypatch.setattr(cli, "build_fx_conversion_summary", lambda **kwargs: _fake_fx_summary())
     monkeypatch.setattr("dca_signal_bot.feishu_sender.send_feishu_text", fake_send_feishu)
 
     workspace = _prepare_workspace("success-feishu-fail")

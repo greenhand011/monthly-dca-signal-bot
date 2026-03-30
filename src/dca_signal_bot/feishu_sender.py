@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .config import StrategyConfig
+from .execution_guidance import ExecutionGuidance
+from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
 from .indicators import TickerIndicators
 from .strategy_engine import StrategyDecision
 
@@ -45,26 +47,57 @@ def build_summary_text(
     latest_market_date_qqqm: date,
     validation_status: str,
     run_mode_label: str | None = None,
+    execution_guidance: ExecutionGuidance | None = None,
+    fx_summary: FxConversionSummary | None = None,
 ) -> str:
     _ = growth
     mode_line = run_mode_label or "Production Mode"
-    return "\n".join(
-        [
-            f"\u65e5\u671f\uff1a{report_date}",
-            f"\u8fd0\u884c\u6a21\u5f0f\uff1a{mode_line}",
-            f"\u72b6\u6001\uff1a{decision.state_label}",
-            f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
-            f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
-            f"{config.growth_ticker}\uff1a{decision.allocation.growth_rmb} RMB",
-            f"\u50a8\u5907\u91d1\u53d8\u52a8\uff1a{decision.reserve_delta_rmb:+d} RMB",
-            f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
-            f"\u6570\u636e\u6e90\uff1a{data_source}",
-            f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
-            f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
-            f"\u539f\u56e0\uff1a{decision.reasons[-1]}",
-            f"\u62a5\u544a\uff1a{report_path}",
-        ]
-    )
+    lines = [
+        f"\u65e5\u671f\uff1a{report_date}",
+        f"\u8fd0\u884c\u6a21\u5f0f\uff1a{mode_line}",
+        f"\u72b6\u6001\uff1a{decision.state_label}",
+        f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
+        f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
+        f"{config.growth_ticker}\uff1a{decision.allocation.growth_rmb} RMB",
+        f"\u50a8\u5907\u91d1\u53d8\u52a8\uff1a{decision.reserve_delta_rmb:+d} RMB",
+        f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
+        f"\u6570\u636e\u6e90\uff1a{data_source}",
+        f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
+        f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
+        f"\u539f\u56e0\uff1a{decision.reasons[-1]}",
+        f"\u62a5\u544a\uff1a{report_path}",
+    ]
+
+    if execution_guidance is not None:
+        lines.extend(
+            [
+                "IBKR Execution Guidance:",
+                f"- Current session phase: {execution_guidance.session_phase}",
+                f"- Can submit now: {'YES' if execution_guidance.can_submit_now else 'NO'}",
+                f"- Can likely fill now: {'YES' if execution_guidance.can_likely_fill_now else 'NO'}",
+                f"- Next regular open ({execution_guidance.user_timezone}): {_format_local_dt(execution_guidance.next_regular_open)}",
+                f"- Next extended-hours opportunity ({execution_guidance.user_timezone}): {_format_local_dt(execution_guidance.next_extended_hours_opportunity)}",
+                f"- Recommended setup: {execution_guidance.preferred_order_type} / {execution_guidance.preferred_tif} / Outside RTH {'YES' if execution_guidance.suggest_outside_rth else 'NO'}",
+            ]
+        )
+
+    if fx_summary is not None:
+        lines.extend(
+            [
+                "USD Estimate:",
+                f"- Total: {format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}",
+                f"- {config.core_ticker}: {format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}",
+                f"- {config.growth_ticker}: {format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}",
+                f"- FX source: {fx_summary.source}",
+                f"- FX validation status: {fx_summary.validation_status}",
+            ]
+        )
+        if fx_summary.rate_cny_per_usd is not None:
+            lines.append(f"- FX rate used: {fx_summary.rate_cny_per_usd:.4f} CNY per USD")
+        else:
+            lines.append("- USD estimate unavailable (FX data issue)")
+
+    return "\n".join(lines)
 
 
 def build_failure_alert_text(
@@ -101,6 +134,12 @@ def _truncate(text: str, limit: int = 400) -> str:
     if len(collapsed) <= limit:
         return collapsed
     return collapsed[: limit - 3] + "..."
+
+
+def _format_local_dt(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.strftime("%Y-%m-%d %H:%M %Z")
 
 
 def send_feishu_text(webhook_url: str, text: str, timeout: int = 10, retries: int = 2) -> None:

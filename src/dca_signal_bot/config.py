@@ -63,6 +63,11 @@ class StrategyConfig:
     growth_weight_normal: float = 0.15
     feishu_enabled: bool = False
     report_timezone: str = "Asia/Shanghai"
+    execution_guidance_enabled: bool = True
+    user_timezone: str = "Asia/Tokyo"
+    preferred_order_type: str = "LIMIT"
+    preferred_tif: str = "DAY"
+    suggest_outside_rth: bool = True
     thresholds: dict[str, dict[str, Any]] = field(
         default_factory=lambda: {name: dict(values) for name, values in DEFAULT_THRESHOLDS.items()}
     )
@@ -166,5 +171,10 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         growth_weight_normal=float(raw.get("growth_weight_normal", 0.15)),
         feishu_enabled=bool(raw.get("feishu_enabled", False)),
         report_timezone=str(raw.get("report_timezone", "Asia/Shanghai")),
+        execution_guidance_enabled=bool(raw.get("execution_guidance_enabled", True)),
+        user_timezone=str(raw.get("user_timezone", "Asia/Tokyo")),
+        preferred_order_type=str(raw.get("preferred_order_type", "LIMIT")),
+        preferred_tif=str(raw.get("preferred_tif", "DAY")),
+        suggest_outside_rth=bool(raw.get("suggest_outside_rth", True)),
         thresholds=merged_thresholds,
     )

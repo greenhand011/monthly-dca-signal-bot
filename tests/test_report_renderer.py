@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 
 from dca_signal_bot.config import load_strategy_config
+from dca_signal_bot.execution_guidance import ExecutionGuidance
+from dca_signal_bot.fx_converter import FxConversionSummary
 from dca_signal_bot.historical_review import HistoricalSignalReview, HistoricalSignalReviewRow
 from dca_signal_bot.indicators import TickerIndicators
 from dca_signal_bot.report_renderer import render_report
@@ -84,6 +89,38 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
             )
         ],
     )
+    guidance = ExecutionGuidance(
+        generated_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
+        user_timezone="Asia/Tokyo",
+        user_time=datetime(2026, 3, 28, 12, 15, tzinfo=ZoneInfo("Asia/Tokyo")),
+        market_time_et=datetime(2026, 3, 27, 23, 15, tzinfo=ZoneInfo("America/New_York")),
+        session_phase="overnight",
+        can_submit_now=True,
+        can_likely_fill_now=False,
+        next_regular_open=datetime(2026, 3, 28, 22, 30, tzinfo=ZoneInfo("Asia/Tokyo")),
+        next_extended_hours_opportunity=datetime(2026, 3, 28, 22, 30, tzinfo=ZoneInfo("Asia/Tokyo")),
+        preferred_order_type="LIMIT",
+        preferred_tif="DAY",
+        suggest_outside_rth=True,
+        warnings=("Market orders before regular hours are risky and should not be the beginner default.",),
+        notes=("US/Eastern is the canonical market-session clock and is converted to the configured user timezone for display.",),
+    )
+    fx_summary = FxConversionSummary(
+        source="Yahoo Finance via yfinance",
+        pair_ticker="CNY=X",
+        pair_description="CNY per USD",
+        fetched_at_utc=datetime(2026, 3, 28, 3, 15, 20, tzinfo=timezone.utc),
+        latest_market_date=pd.Timestamp("2026-03-27").date(),
+        validation_status="PASS",
+        rate_cny_per_usd=7.2,
+        total_rmb=decision.recommendation_total_rmb,
+        core_rmb=decision.allocation.core_rmb,
+        growth_rmb=decision.allocation.growth_rmb,
+        total_usd=416.67,
+        core_usd=354.17,
+        growth_usd=62.5,
+        note="FX conversion completed successfully.",
+    )
 
     markdown = render_report(
         config=config,
@@ -99,10 +136,14 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         validation_status="PASS",
         run_mode_label="Simulation Mode: base_monthly_rmb = 6000",
         historical_review=review,
+        execution_guidance=guidance,
+        fx_summary=fx_summary,
     )
 
     assert "Simulation Mode: base_monthly_rmb = 6000" in markdown
     assert "## Signal Trigger Details" in markdown
+    assert "## IBKR Execution Guidance" in markdown
+    assert "## FX / USD Estimates" in markdown
     assert "### Rule Evaluations" in markdown
     assert "HEAT" in markdown
     assert "YES" in markdown
@@ -114,3 +155,4 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     assert "2026-03" in markdown
     assert "Reserve Delta" in markdown
     assert "VOO" in markdown
+    assert f"Total investment: {decision.recommendation_total_rmb} RMB (~USD 416.67)" in markdown

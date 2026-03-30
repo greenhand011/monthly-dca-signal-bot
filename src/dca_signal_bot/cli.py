@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 from .config import load_strategy_config
 from .data_fetcher import DATA_SOURCE, DataFetchError, fetch_histories
 from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
+from .execution_guidance import build_execution_guidance
+from .fx_converter import build_fx_conversion_summary
 from .historical_review import build_historical_signal_review
 from .indicators import IndicatorComputationError, compute_ticker_indicators
 from .report_renderer import render_report, report_path_for
@@ -118,6 +120,22 @@ def _run(
             reserve_state=reserve_state,
         )
         reserve_after_rmb = decision.reserve_cash_after_rmb
+        execution_guidance = None
+        if effective_config.execution_guidance_enabled:
+            execution_guidance = build_execution_guidance(
+                user_timezone=effective_config.user_timezone,
+                preferred_order_type=effective_config.preferred_order_type,
+                preferred_tif=effective_config.preferred_tif,
+                suggest_outside_rth=effective_config.suggest_outside_rth,
+                now_utc=fetched_at_utc,
+            )
+        fx_summary = build_fx_conversion_summary(
+            total_rmb=decision.recommendation_total_rmb,
+            core_rmb=decision.allocation.core_rmb,
+            growth_rmb=decision.allocation.growth_rmb,
+            reference_date=report_date,
+            fetched_at_utc=fetched_at_utc,
+        )
 
         report_path = report_path_for(reports_dir, report_date)
         historical_review = build_historical_signal_review(
@@ -140,6 +158,8 @@ def _run(
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
             historical_review=historical_review,
+            execution_guidance=execution_guidance,
+            fx_summary=fx_summary,
         )
         report_path.write_text(report_markdown, encoding="utf-8")
 
@@ -161,6 +181,8 @@ def _run(
             latest_market_date_qqqm=growth_history.latest_market_date,
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
+            execution_guidance=execution_guidance,
+            fx_summary=fx_summary,
         )
 
         feishu_sent = False
@@ -184,6 +206,11 @@ def _run(
         print(f"{effective_config.core_ticker}: {decision.allocation.core_rmb} RMB")
         print(f"{effective_config.growth_ticker}: {decision.allocation.growth_rmb} RMB")
         print(f"Reserve after run: {reserve_after_rmb} RMB")
+        print(f"FX validation status: {fx_summary.validation_status}")
+        print(
+            "IBKR session phase: "
+            f"{execution_guidance.session_phase if execution_guidance is not None else 'disabled'}"
+        )
         print(f"Report written to: {report_path}")
         print(f"State written to: {state_file if not simulation_mode else 'skipped (simulation mode)'}")
         print(f"Feishu sent: {'yes' if feishu_sent else 'no'}")

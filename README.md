@@ -109,6 +109,11 @@ Important fields:
 - `feishu_enabled`
 - `report_timezone`
 - `strategy_name`
+- `execution_guidance_enabled`
+- `user_timezone`
+- `preferred_order_type`
+- `preferred_tif`
+- `suggest_outside_rth`
 
 ### Changing the baseline from 3000 to 6000
 
@@ -185,6 +190,24 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - Simulation mode does **not** mutate `state/reserve_state.json` by default
 - This is intended for safe inspection, not for changing production state
 
+## IBKR Execution Guidance and USD Estimates
+
+The report also includes a separate execution-aid layer for IBKR users:
+
+- It shows the current market session phase using US/Eastern market hours
+- It converts session timestamps into the configured `user_timezone`
+- It handles DST, weekends, and a lightweight NYSE holiday calendar
+- It recommends a beginner-friendly setup such as `LIMIT` + `DAY`
+- It does **not** place orders, log in to IBKR, or automate execution
+
+The report also shows estimated USD amounts alongside the RMB strategy output:
+
+- RMB remains the source of truth for the strategy
+- USD values are estimated from real online FX data only
+- The current FX pair is Yahoo Finance `CNY=X`, interpreted as CNY per USD
+- If FX data retrieval fails, USD values are omitted instead of being fabricated
+- FX failures do not change the underlying monthly recommendation
+
 ## Feishu Webhook
 
 Set:
@@ -253,6 +276,14 @@ What to expect:
 - The report is still written if data validation passed
 - Feishu failures are surfaced in the Actions log and the step fails
 - The report and state artifacts still remain available for inspection
+
+### USD estimate unavailable
+
+If the FX quote cannot be fetched:
+
+- The report still renders the RMB recommendation
+- The USD section shows that the estimate is unavailable
+- The strategy output and reserve state are unchanged
 
 ### GitHub Actions permissions issue
 

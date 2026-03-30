@@ -7,6 +7,11 @@ core_weight_normal: 0.85
 growth_weight_normal: 0.15
 feishu_enabled: false
 report_timezone: Asia/Shanghai
+execution_guidance_enabled: true
+user_timezone: Asia/Tokyo
+preferred_order_type: LIMIT
+preferred_tif: DAY
+suggest_outside_rth: true
 
 thresholds:
   extreme_heat:

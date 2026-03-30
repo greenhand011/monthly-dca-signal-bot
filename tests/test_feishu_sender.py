@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 import requests
 import pytest
 
-from dca_signal_bot.feishu_sender import FeishuError, maybe_send_feishu, send_feishu_text
+from dca_signal_bot.execution_guidance import ExecutionGuidance
+from dca_signal_bot.feishu_sender import FeishuError, build_summary_text, maybe_send_feishu, send_feishu_text
+from dca_signal_bot.fx_converter import FxConversionSummary
+from dca_signal_bot.strategy_engine import AllocationBreakdown, StrategyDecision
 
 
 class _DummyResponse:
@@ -79,3 +85,68 @@ def test_sender_prefixes_keyword_when_configured(monkeypatch):
     send_feishu_text("https://example.invalid", "monthly summary")
 
     assert captured["json"]["content"]["text"].startswith("DCA-BOT\n")
+
+
+def test_summary_text_includes_execution_guidance_and_usd_estimates():
+    decision = StrategyDecision(
+        state_label="NORMAL",
+        action_label="原样投",
+        recommendation_total_rmb=3000,
+        allocation=AllocationBreakdown(core_rmb=2550, growth_rmb=450, core_weight=0.85, growth_weight=0.15),
+        reserve_delta_rmb=0,
+        reserve_cash_after_rmb=0,
+        reasons=["Baseline allocation applies."],
+    )
+    guidance = ExecutionGuidance(
+        generated_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
+        user_timezone="Asia/Tokyo",
+        user_time=datetime(2026, 3, 30, 15, 55, tzinfo=timezone.utc),
+        market_time_et=datetime(2026, 3, 30, 2, 55, tzinfo=timezone.utc),
+        session_phase="regular",
+        can_submit_now=True,
+        can_likely_fill_now=True,
+        next_regular_open=datetime(2026, 3, 31, 9, 30, tzinfo=timezone.utc),
+        next_extended_hours_opportunity=datetime(2026, 3, 30, 16, 0, tzinfo=timezone.utc),
+        preferred_order_type="LIMIT",
+        preferred_tif="DAY",
+        suggest_outside_rth=True,
+        warnings=("Market orders before regular hours are risky and should not be the beginner default.",),
+        notes=("This project does not place orders automatically.",),
+    )
+    fx_summary = FxConversionSummary(
+        source="Yahoo Finance via yfinance",
+        pair_ticker="CNY=X",
+        pair_description="CNY per USD",
+        fetched_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
+        latest_market_date=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        validation_status="PASS",
+        rate_cny_per_usd=7.2,
+        total_rmb=3000,
+        core_rmb=2550,
+        growth_rmb=450,
+        total_usd=416.67,
+        core_usd=354.17,
+        growth_usd=62.5,
+        note="FX conversion completed successfully.",
+    )
+
+    summary = build_summary_text(
+        config=SimpleNamespace(core_ticker="VOO", growth_ticker="QQQM"),
+        growth=object(),
+        decision=decision,
+        report_path="reports/2026-03-report.md",
+        report_date="2026-03-30",
+        data_source="Yahoo Finance via yfinance",
+        latest_market_date_core=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        latest_market_date_qqqm=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        validation_status="PASS",
+        run_mode_label="Production Mode",
+        execution_guidance=guidance,
+        fx_summary=fx_summary,
+    )
+
+    assert "IBKR Execution Guidance:" in summary
+    assert "USD Estimate:" in summary
+    assert "Total: 3000 RMB (~USD 416.67)" in summary
+    assert "VOO: 2550 RMB (~USD 354.17)" in summary
+    assert "QQQM: 450 RMB (~USD 62.50)" in summary

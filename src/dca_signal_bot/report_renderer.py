@@ -4,6 +4,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .config import StrategyConfig
+from .execution_guidance import ExecutionGuidance
+from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
 from .historical_review import HistoricalSignalReview
 from .indicators import TickerIndicators
 from .strategy_engine import RuleEvaluation, StrategyDecision
@@ -13,6 +15,10 @@ def _utc_iso(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _format_local_dt(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M %Z")
 
 
 def _bool_to_yes_no(value: bool) -> str:
@@ -45,6 +51,48 @@ def _render_historical_review_table(review: HistoricalSignalReview, core_label: 
     return "\n".join(lines) + "\n"
 
 
+def _render_execution_guidance(guidance: ExecutionGuidance) -> str:
+    outside_rth = "YES" if guidance.suggest_outside_rth else "NO"
+    warnings = "\n".join(f"- {warning}" for warning in guidance.warnings)
+    notes = "\n".join(f"- {note}" for note in guidance.notes)
+    return (
+        "## IBKR Execution Guidance\n\n"
+        f"- Current session phase (US/Eastern): `{guidance.session_phase}`\n"
+        f"- Can submit now: `{_bool_to_yes_no(guidance.can_submit_now)}`\n"
+        f"- Can likely fill now: `{_bool_to_yes_no(guidance.can_likely_fill_now)}`\n"
+        f"- Next regular open ({guidance.user_timezone}): `{_format_local_dt(guidance.next_regular_open)}`\n"
+        f"- Next extended-hours opportunity ({guidance.user_timezone}): `{_format_local_dt(guidance.next_extended_hours_opportunity)}`\n"
+        f"- Recommended setup: Order Type `{guidance.preferred_order_type}`, Time in Force `{guidance.preferred_tif}`, Outside RTH `{outside_rth}`\n\n"
+        "### Warnings / Notes\n\n"
+        f"{warnings}\n"
+        f"{notes}\n"
+    )
+
+
+def _render_fx_section(fx_summary: FxConversionSummary, core_label: str, growth_label: str) -> str:
+    if fx_summary.validation_status != "PASS" or fx_summary.rate_cny_per_usd is None:
+        return (
+            "## FX / USD Estimates\n\n"
+            f"- FX source: {fx_summary.source}\n"
+            f"- FX pair: {fx_summary.pair_ticker} ({fx_summary.pair_description})\n"
+            f"- FX fetched at (UTC): {_utc_iso(fx_summary.fetched_at_utc)}\n"
+            f"- FX validation status: {fx_summary.validation_status}\n"
+            f"- USD estimate unavailable due to FX retrieval/validation failure.\n"
+        )
+
+    return (
+        "## FX / USD Estimates\n\n"
+        f"- FX source: {fx_summary.source}\n"
+        f"- FX pair: {fx_summary.pair_ticker} ({fx_summary.pair_description})\n"
+        f"- FX fetched at (UTC): {_utc_iso(fx_summary.fetched_at_utc)}\n"
+        f"- FX rate used: `{fx_summary.rate_cny_per_usd:.4f} CNY per USD`\n"
+        f"- FX validation status: {fx_summary.validation_status}\n"
+        f"- Total investment: {format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}\n"
+        f"- {core_label} allocation: {format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}\n"
+        f"- {growth_label} allocation: {format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}\n"
+    )
+
+
 def render_report(
     *,
     config: StrategyConfig,
@@ -60,6 +108,8 @@ def render_report(
     validation_status: str,
     run_mode_label: str | None = None,
     historical_review: HistoricalSignalReview | None = None,
+    execution_guidance: ExecutionGuidance | None = None,
+    fx_summary: FxConversionSummary | None = None,
 ) -> str:
     reasons = "\n".join(f"- {reason}" for reason in decision.reasons)
     run_mode_line = f"`{run_mode_label}`" if run_mode_label else "`Production Mode`"
@@ -82,6 +132,14 @@ def render_report(
             f"{_render_historical_review_table(historical_review, config.core_ticker)}\n"
         )
 
+    execution_section = ""
+    if execution_guidance is not None:
+        execution_section = _render_execution_guidance(execution_guidance) + "\n"
+
+    fx_section = ""
+    if fx_summary is not None:
+        fx_section = _render_fx_section(fx_summary, config.core_ticker, config.growth_ticker) + "\n"
+
     return (
         f"# {config.strategy_name} \u6708\u5ea6\u5b9a\u6295\u62a5\u544a\n\n"
         f"**\u65e5\u671f**\uff1a{report_date.isoformat()}  \n"
@@ -93,6 +151,8 @@ def render_report(
         f"- Latest market date for {config.core_ticker}: {latest_market_date_core.isoformat()}\n"
         f"- Latest market date for {config.growth_ticker}: {latest_market_date_qqqm.isoformat()}\n"
         f"- Validation status: {validation_status}\n\n"
+        f"{execution_section}"
+        f"{fx_section}"
         "## \u5e02\u573a\u6570\u636e\n\n"
         f"- {config.core_ticker} \u5f53\u524d\u4ef7\u683c\uff1a`{core.current_price:.2f}`\n"
         f"- {config.growth_ticker} \u5f53\u524d\u4ef7\u683c\uff1a`{growth.current_price:.2f}`\n"
