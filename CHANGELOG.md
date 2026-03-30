@@ -8,3 +8,4 @@
 - Added Markdown report generation
 - Added Feishu webhook notifications
 - Added GitHub Actions workflow for monthly runs and manual dispatch
+- Switched the production core ETF to `VOO`

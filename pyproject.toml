@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "monthly-dca-signal-bot"
 version = "0.1.0"
-description = "A reusable monthly DCA signal bot for SPYM and QQQM."
+description = "A reusable monthly DCA signal bot for VOO and QQQM."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

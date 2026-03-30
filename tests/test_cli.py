@@ -28,7 +28,7 @@ def _prepare_workspace(name: str) -> Path:
 
 def _fake_bundle() -> MarketDataBundle:
     histories = {
-        "SPYM": TickerHistory("SPYM", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 1100),
+        "VOO": TickerHistory("VOO", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 1100),
         "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 1100),
     }
     return MarketDataBundle(
@@ -71,6 +71,7 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     assert "Signal Trigger Details" in content
     assert "Historical Signal Review" in content
     assert "Production Mode" in content
+    assert "VOO" in content
     assert state_file.exists()
     assert sent_messages == []
 
@@ -104,7 +105,7 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     assert state_file.exists()
     assert len(sent_messages) == 1
     assert "Production Mode" in sent_messages[0]
-    assert "reserve cash" in sent_messages[0].lower() or "储备金变动" in sent_messages[0]
+    assert "VOO" in sent_messages[0]
 
 
 def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch):
@@ -140,6 +141,7 @@ def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch)
     content = report_file.read_text(encoding="utf-8")
     assert "Simulation Mode: base_monthly_rmb = 6000" in content
     assert "Historical Signal Review (Recent 6 Months)" in content
+    assert "VOO" in content
     assert json.loads(state_file.read_text(encoding="utf-8")) == original_state
 
 
@@ -200,6 +202,6 @@ def test_cli_failure_path_sends_only_failure_alert(monkeypatch):
     assert not (reports_dir / "2026-03-report.md").exists()
     assert not state_file.exists()
     assert len(sent_messages) == 1
-    assert "数据校验失败" in sent_messages[0]
+    assert "VOO + QQQM" in sent_messages[0]
     assert "最新市场日期：N/A" in sent_messages[0]
     assert "校验状态：FAIL" in sent_messages[0]

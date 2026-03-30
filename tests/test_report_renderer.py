@@ -41,7 +41,7 @@ def _indicator(
 def test_render_report_contains_trigger_details_historical_review_and_simulation_label():
     config = load_strategy_config("config/strategy.yaml")
     core = _indicator(
-        "SPYM",
+        "VOO",
         price=500.0,
         high_52w=520.0,
         drawdown_52w=0.04,
@@ -74,7 +74,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
                 status="HEAT",
                 base_monthly_rmb=3000,
                 suggested_total_rmb=2500,
-                spym_rmb=2200,
+                core_rmb=2200,
                 qqqm_rmb=300,
                 reserve_cash_delta_rmb=500,
                 reserve_cash_balance_rmb=500,
@@ -94,7 +94,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         report_date=pd.Timestamp("2026-03-28").date(),
         data_source="Yahoo Finance via yfinance",
         fetched_at_utc=pd.Timestamp("2026-03-28T03:15:20Z").to_pydatetime(),
-        latest_market_date_spym=pd.Timestamp("2026-03-27").date(),
+        latest_market_date_core=pd.Timestamp("2026-03-27").date(),
         latest_market_date_qqqm=pd.Timestamp("2026-03-27").date(),
         validation_status="PASS",
         run_mode_label="Simulation Mode: base_monthly_rmb = 6000",
@@ -113,3 +113,4 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     assert "signal-only historical review for 1 month" in markdown
     assert "2026-03" in markdown
     assert "Reserve Delta" in markdown
+    assert "VOO" in markdown

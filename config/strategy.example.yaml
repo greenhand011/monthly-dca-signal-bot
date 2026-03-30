@@ -1,7 +1,7 @@
 strategy_name: monthly-dca-signal-bot
 base_monthly_rmb: 3000
 reserve_cap_multiple: 2.0
-core_ticker: SPYM
+core_ticker: VOO
 growth_ticker: QQQM
 core_weight_normal: 0.85
 growth_weight_normal: 0.15

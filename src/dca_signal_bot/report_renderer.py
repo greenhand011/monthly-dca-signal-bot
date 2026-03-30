@@ -27,19 +27,19 @@ def _render_condition_lines(rule: RuleEvaluation) -> str:
     )
 
 
-def _render_historical_review_table(review: HistoricalSignalReview) -> str:
+def _render_historical_review_table(review: HistoricalSignalReview, core_label: str) -> str:
     if not review.rows:
         return "_No historical review rows were available._\n"
 
     lines = [
-        "| Month | Status | Base RMB | Suggested Total | SPYM | QQQM | Reserve Delta | Reserve Balance | Trigger | Reason |",
+        f"| Month | Status | Base RMB | Suggested Total | {core_label} | QQQM | Reserve Delta | Reserve Balance | Trigger | Reason |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for row in review.rows:
         lines.append(
             "| "
             f"{row.month} | {row.status} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
-            f"{row.spym_rmb} | {row.qqqm_rmb} | {row.reserve_cash_delta_rmb:+d} | {row.reserve_cash_balance_rmb} | "
+            f"{row.core_rmb} | {row.qqqm_rmb} | {row.reserve_cash_delta_rmb:+d} | {row.reserve_cash_balance_rmb} | "
             f"{row.key_trigger_summary} | {row.short_reason} |"
         )
     return "\n".join(lines) + "\n"
@@ -55,7 +55,7 @@ def render_report(
     report_date: date,
     data_source: str,
     fetched_at_utc: datetime,
-    latest_market_date_spym: date,
+    latest_market_date_core: date,
     latest_market_date_qqqm: date,
     validation_status: str,
     run_mode_label: str | None = None,
@@ -79,7 +79,7 @@ def render_report(
         historical_section = (
             f"## Historical Signal Review (Recent {historical_review.months} {review_unit})\n\n"
             f"> {historical_review.note}\n\n"
-            f"{_render_historical_review_table(historical_review)}\n"
+            f"{_render_historical_review_table(historical_review, config.core_ticker)}\n"
         )
 
     return (
@@ -90,7 +90,7 @@ def render_report(
         "## \u6570\u636e\u4fe1\u606f\n\n"
         f"- Data source: {data_source}\n"
         f"- Data fetched at (UTC): {_utc_iso(fetched_at_utc)}\n"
-        f"- Latest market date for {config.core_ticker}: {latest_market_date_spym.isoformat()}\n"
+        f"- Latest market date for {config.core_ticker}: {latest_market_date_core.isoformat()}\n"
         f"- Latest market date for {config.growth_ticker}: {latest_market_date_qqqm.isoformat()}\n"
         f"- Validation status: {validation_status}\n\n"
         "## \u5e02\u573a\u6570\u636e\n\n"

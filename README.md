@@ -1,6 +1,6 @@
 # monthly-dca-signal-bot
 
-`monthly-dca-signal-bot` is a small, open-source monthly DCA signal bot for a two-ETF core/growth portfolio built around `SPYM` and `QQQM`.
+`monthly-dca-signal-bot` is a small, open-source monthly DCA signal bot for a two-ETF core/growth portfolio built around `VOO` and `QQQM`.
 
 It is designed to:
 
@@ -11,11 +11,11 @@ It is designed to:
 - Persist reserve cash across monthly runs
 - Fail fast if the market data is missing, stale, incomplete, or otherwise untrustworthy
 
-## Why only SPYM + QQQM
+## Why only VOO + QQQM
 
 This repository intentionally keeps the portfolio narrow:
 
-- `SPYM` acts as the broad core holding
+- `VOO` acts as the broad core holding
 - `QQQM` acts as the growth tilt
 - A two-ticker setup keeps the strategy easy to review, test, and maintain
 - The rule set is easier to explain when only one growth ticker is used for the signal logic
@@ -36,7 +36,7 @@ The engine can produce the following states:
 The default configuration uses:
 
 - `base_monthly_rmb: 3000`
-- `SPYM: 85%`
+- `VOO: 85%`
 - `QQQM: 15%`
 
 When the market overheats, part of the monthly amount is diverted into reserve cash. When the market pulls back, some reserve cash may be deployed.
@@ -205,7 +205,7 @@ On success, the summary includes:
 - Date
 - Status
 - Suggested total investment
-- SPYM amount
+- VOO amount
 - QQQM amount
 - Reserve cash
 - Data source

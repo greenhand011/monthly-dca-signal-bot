@@ -57,7 +57,7 @@ class StrategyConfig:
     strategy_name: str = "monthly-dca-signal-bot"
     base_monthly_rmb: int = 3000
     reserve_cap_multiple: float = 2.0
-    core_ticker: str = "SPYM"
+    core_ticker: str = "VOO"
     growth_ticker: str = "QQQM"
     core_weight_normal: float = 0.85
     growth_weight_normal: float = 0.15
@@ -160,7 +160,7 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         strategy_name=str(raw.get("strategy_name", "monthly-dca-signal-bot")),
         base_monthly_rmb=int(raw.get("base_monthly_rmb", 3000)),
         reserve_cap_multiple=float(raw.get("reserve_cap_multiple", 2.0)),
-        core_ticker=str(raw.get("core_ticker", "SPYM")),
+        core_ticker=str(raw.get("core_ticker", "VOO")),
         growth_ticker=str(raw.get("growth_ticker", "QQQM")),
         core_weight_normal=float(raw.get("core_weight_normal", 0.85)),
         growth_weight_normal=float(raw.get("growth_weight_normal", 0.15)),

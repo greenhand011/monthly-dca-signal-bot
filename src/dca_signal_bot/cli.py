@@ -51,6 +51,8 @@ def _maybe_send_failure_alert(
     dry_run: bool,
     error: str,
     fetched_at_utc: datetime,
+    core_ticker: str,
+    growth_ticker: str,
 ) -> bool:
     if dry_run:
         return False
@@ -61,6 +63,8 @@ def _maybe_send_failure_alert(
         error=error,
         data_source=DATA_SOURCE,
         fetched_at_utc=fetched_at_utc,
+        core_ticker=core_ticker,
+        growth_ticker=growth_ticker,
         validation_status="FAIL",
     )
     from .feishu_sender import send_feishu_text
@@ -131,7 +135,7 @@ def _run(
             report_date=report_date,
             data_source=bundle.data_source,
             fetched_at_utc=bundle.fetched_at_utc,
-            latest_market_date_spym=core_history.latest_market_date,
+            latest_market_date_core=core_history.latest_market_date,
             latest_market_date_qqqm=growth_history.latest_market_date,
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
@@ -153,7 +157,7 @@ def _run(
             report_path=report_path,
             report_date=report_date.isoformat(),
             data_source=bundle.data_source,
-            latest_market_date_spym=core_history.latest_market_date,
+            latest_market_date_core=core_history.latest_market_date,
             latest_market_date_qqqm=growth_history.latest_market_date,
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
@@ -192,6 +196,8 @@ def _run(
                 dry_run=dry_run,
                 error=failure_text,
                 fetched_at_utc=fetched_at_utc,
+                core_ticker=config.core_ticker,
+                growth_ticker=config.growth_ticker,
             )
         except FeishuError as notify_exc:
             print(f"[error] Failure alert could not be sent: {notify_exc}")

@@ -37,7 +37,7 @@ def _indicator(
 
 def _core_indicator() -> TickerIndicators:
     return TickerIndicators(
-        ticker="SPYM",
+        ticker="VOO",
         latest_date=pd.Timestamp("2026-03-28"),
         current_price=500.0,
         high_52w=550.0,

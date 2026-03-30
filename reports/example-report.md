@@ -9,25 +9,25 @@
 
 - Data source: Yahoo Finance via yfinance
 - Data fetched at (UTC): 2026-03-28T03:15:20Z
-- Latest market date for SPYM: 2026-03-27
+- Latest market date for VOO: 2026-03-27
 - Latest market date for QQQM: 2026-03-27
 - Validation status: PASS
 
 ## Market Data
 
-- SPYM current price: `512.34`
+- VOO current price: `512.34`
 - QQQM current price: `468.12`
 - QQQM 52-week drawdown: `8.40%`
 - QQQM deviation from 200-day SMA: `-1.25%`
 - QQQM RSI(14): `54.80`
-- SPYM 3-year price percentile: `61.20%`
+- VOO 3-year price percentile: `61.20%`
 - QQQM 3-year price percentile: `58.90%`
 - Current reserve cash: `0 RMB`
 
 ## This Month
 
 - Suggested total investment: `3000 RMB`
-- SPYM suggested amount: `2550 RMB`
+- VOO suggested amount: `2550 RMB`
 - QQQM suggested amount: `450 RMB`
 - Suggested action: `NORMAL`
 

@@ -102,6 +102,8 @@ jobs:
               error="GitHub Actions failed after the report was generated.",
               data_source="Yahoo Finance via yfinance",
               fetched_at_utc=datetime.now(timezone.utc),
+              core_ticker="VOO",
+              growth_ticker="QQQM",
               validation_status="FAIL",
           )
           send_feishu_text(webhook_url, text)

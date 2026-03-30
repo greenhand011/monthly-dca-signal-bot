@@ -41,7 +41,7 @@ def build_summary_text(
     report_path: str | Path,
     report_date: str,
     data_source: str,
-    latest_market_date_spym: date,
+    latest_market_date_core: date,
     latest_market_date_qqqm: date,
     validation_status: str,
     run_mode_label: str | None = None,
@@ -59,7 +59,7 @@ def build_summary_text(
             f"\u50a8\u5907\u91d1\u53d8\u52a8\uff1a{decision.reserve_delta_rmb:+d} RMB",
             f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
             f"\u6570\u636e\u6e90\uff1a{data_source}",
-            f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_spym.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
+            f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
             f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
             f"\u539f\u56e0\uff1a{decision.reasons[-1]}",
             f"\u62a5\u544a\uff1a{report_path}",
@@ -72,12 +72,15 @@ def build_failure_alert_text(
     error: str,
     data_source: str,
     fetched_at_utc: datetime,
+    core_ticker: str = "VOO",
+    growth_ticker: str = "QQQM",
     validation_status: str = "FAIL",
 ) -> str:
     return "\n".join(
         [
             "\u6570\u636e\u6821\u9a8c\u5931\u8d25\uff0c\u672a\u751f\u6210\u53ef\u4fe1\u62a5\u544a\u3002",
             f"\u65f6\u95f4\uff1a{_utc_iso(fetched_at_utc)}",
+            f"\u6807\u7684\u7ec4\u5408\uff1a{core_ticker} + {growth_ticker}",
             f"\u6570\u636e\u6e90\uff1a{data_source}",
             "\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1aN/A",
             f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_status}",
