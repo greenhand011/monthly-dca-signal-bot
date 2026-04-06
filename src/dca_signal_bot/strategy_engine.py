@@ -33,8 +33,10 @@ class RuleEvaluation:
 @dataclass(frozen=True)
 class AllocationBreakdown:
     core_rmb: int
+    secondary_rmb: int
     growth_rmb: int
     core_weight: float
+    secondary_weight: float
     growth_weight: float
 
 
@@ -60,13 +62,31 @@ def _round_rmb(value: float) -> int:
     return int(round(value))
 
 
-def _allocations(total_rmb: int, core_weight: float, growth_weight: float) -> AllocationBreakdown:
-    core_rmb = _round_rmb(total_rmb * core_weight)
-    growth_rmb = max(0, total_rmb - core_rmb)
+def _allocations(
+    total_rmb: int,
+    core_weight: float,
+    growth_weight: float,
+    core_weight_normal: float,
+    secondary_weight_normal: float,
+) -> AllocationBreakdown:
+    core_total_rmb = _round_rmb(total_rmb * core_weight)
+    growth_rmb = max(0, total_rmb - core_total_rmb)
+    if secondary_weight_normal > 0:
+        ratio = secondary_weight_normal / max(1e-9, core_weight_normal + secondary_weight_normal)
+        secondary_rmb = _round_rmb(core_total_rmb * ratio)
+        core_rmb = max(0, core_total_rmb - secondary_rmb)
+    else:
+        secondary_rmb = 0
+        core_rmb = core_total_rmb
+    secondary_weight = core_weight * (
+        secondary_weight_normal / max(1e-9, core_weight_normal + secondary_weight_normal)
+    )
     return AllocationBreakdown(
         core_rmb=core_rmb,
+        secondary_rmb=secondary_rmb,
         growth_rmb=growth_rmb,
         core_weight=core_weight,
+        secondary_weight=secondary_weight,
         growth_weight=growth_weight,
     )
 
@@ -250,7 +270,14 @@ def evaluate_strategy(
     state_label = "NORMAL"
     action_label = ACTION_NORMAL
     recommendation_total = base
-    allocation = _allocations(base, config.core_weight_normal, config.growth_weight_normal)
+    core_total_weight = config.core_weight_normal + config.secondary_weight_normal
+    allocation = _allocations(
+        base,
+        core_total_weight,
+        config.growth_weight_normal,
+        config.core_weight_normal,
+        config.secondary_weight_normal,
+    )
     reserve_delta = 0
     triggered_rule = "NORMAL"
 
@@ -262,6 +289,8 @@ def evaluate_strategy(
             recommendation_total,
             float(growth_thresholds["extreme_heat"]["core_weight"]),
             float(growth_thresholds["extreme_heat"]["growth_weight"]),
+            config.core_weight_normal,
+            config.secondary_weight_normal,
         )
         reserve_delta = min(base - recommendation_total, reserve_space)
         triggered_rule = "EXTREME_HEAT"
@@ -276,6 +305,8 @@ def evaluate_strategy(
             recommendation_total,
             float(growth_thresholds["heat"]["core_weight"]),
             float(growth_thresholds["heat"]["growth_weight"]),
+            config.core_weight_normal,
+            config.secondary_weight_normal,
         )
         reserve_delta = min(base - recommendation_total, reserve_space)
         triggered_rule = "HEAT"
@@ -293,6 +324,8 @@ def evaluate_strategy(
             recommendation_total,
             float(growth_thresholds["capitulation_recovery"]["core_weight"]),
             float(growth_thresholds["capitulation_recovery"]["growth_weight"]),
+            config.core_weight_normal,
+            config.secondary_weight_normal,
         )
         reserve_delta = -extra
         action_label = ACTION_INCREASE if extra > 0 else ACTION_NORMAL
@@ -311,6 +344,8 @@ def evaluate_strategy(
             recommendation_total,
             float(growth_thresholds["deep_pullback"]["core_weight"]),
             float(growth_thresholds["deep_pullback"]["growth_weight"]),
+            config.core_weight_normal,
+            config.secondary_weight_normal,
         )
         reserve_delta = -extra
         action_label = ACTION_INCREASE if extra > 0 else ACTION_NORMAL
@@ -329,6 +364,8 @@ def evaluate_strategy(
             recommendation_total,
             float(growth_thresholds["pullback"]["core_weight"]),
             float(growth_thresholds["pullback"]["growth_weight"]),
+            config.core_weight_normal,
+            config.secondary_weight_normal,
         )
         reserve_delta = -extra
         action_label = ACTION_INCREASE if extra > 0 else ACTION_NORMAL

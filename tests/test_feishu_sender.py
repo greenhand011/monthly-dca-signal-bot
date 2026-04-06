@@ -92,7 +92,14 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         state_label="NORMAL",
         action_label="原样投",
         recommendation_total_rmb=3000,
-        allocation=AllocationBreakdown(core_rmb=2550, growth_rmb=450, core_weight=0.85, growth_weight=0.15),
+        allocation=AllocationBreakdown(
+            core_rmb=2550,
+            secondary_rmb=0,
+            growth_rmb=450,
+            core_weight=0.85,
+            secondary_weight=0.0,
+            growth_weight=0.15,
+        ),
         reserve_delta_rmb=0,
         reserve_cash_after_rmb=0,
         reasons=["按基线配比执行。"],
@@ -127,11 +134,13 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
+        extra_rmb={},
+        extra_usd={},
         note="汇率换算完成。",
     )
 
     summary = build_summary_text(
-        config=SimpleNamespace(core_ticker="VOO", growth_ticker="QQQM"),
+        config=SimpleNamespace(core_ticker="VOO", secondary_ticker=None, growth_ticker="QQQM"),
         growth=object(),
         decision=decision,
         report_path="reports/2026-03-report.md",

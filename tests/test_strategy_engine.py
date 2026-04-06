@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pandas as pd
 
-from dca_signal_bot.config import load_strategy_config
+from dca_signal_bot.config import apply_base_override, load_strategy_config
 from dca_signal_bot.indicators import TickerIndicators
 from dca_signal_bot.reserve_state import ReserveState
 from dca_signal_bot.strategy_engine import ACTION_INCREASE, ACTION_NORMAL, ACTION_REDUCE, evaluate_strategy
@@ -169,3 +169,29 @@ def test_execution_guidance_settings_do_not_change_strategy_outputs():
     )
 
     assert guidance_enabled == baseline
+
+
+def test_base_override_6000_uses_splg_vxus_qqqm_allocation():
+    config = load_strategy_config("config/strategy.yaml")
+    override = apply_base_override(config, 6000)
+    growth = _indicator(
+        current_price=100.0,
+        high_52w=105.0,
+        drawdown_52w=0.0476,
+        sma200=110.0,
+        deviation_from_sma200=-0.0909,
+        sma20=102.0,
+        deviation_from_sma20=-0.0196,
+        rsi14=50.0,
+        price_percentile_3y=40.0,
+    )
+
+    result = evaluate_strategy(override, _core_indicator(), growth, ReserveState(reserve_cash_rmb=0))
+
+    assert override.core_ticker == "SPLG"
+    assert override.secondary_ticker == "VXUS"
+    assert override.growth_ticker == "QQQM"
+    assert result.recommendation_total_rmb == 6000
+    assert result.allocation.core_rmb == 4200
+    assert result.allocation.secondary_rmb == 1200
+    assert result.allocation.growth_rmb == 600

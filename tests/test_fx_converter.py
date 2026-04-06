@@ -23,6 +23,7 @@ def test_fx_conversion_math_is_correct_for_cny_per_usd(monkeypatch):
         growth_rmb=450,
         reference_date=pd.Timestamp("2026-03-30").date(),
         fetched_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
+        extra_rmb={"VXUS": 600},
     )
 
     assert summary.validation_status == "PASS"
@@ -30,6 +31,7 @@ def test_fx_conversion_math_is_correct_for_cny_per_usd(monkeypatch):
     assert summary.total_usd == 416.67
     assert summary.core_usd == 354.17
     assert summary.growth_usd == 62.5
+    assert summary.extra_usd["VXUS"] == 83.33
     assert convert_rmb_to_usd(720, 7.2) == 100.0
 
 
@@ -45,6 +47,7 @@ def test_fx_failure_does_not_fabricate_usd_values(monkeypatch):
         growth_rmb=450,
         reference_date=pd.Timestamp("2026-03-30").date(),
         fetched_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
+        extra_rmb={"VXUS": 600},
     )
 
     assert summary.validation_status == "FAIL"
@@ -52,4 +55,5 @@ def test_fx_failure_does_not_fabricate_usd_values(monkeypatch):
     assert summary.total_usd is None
     assert summary.core_usd is None
     assert summary.growth_usd is None
+    assert summary.extra_usd == {}
     assert "美元估算不可用" in summary.note

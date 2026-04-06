@@ -18,6 +18,7 @@ class HistoricalSignalReviewRow:
     base_monthly_rmb: int
     suggested_total_rmb: int
     core_rmb: int
+    secondary_rmb: int
     qqqm_rmb: int
     reserve_cash_delta_rmb: int
     reserve_cash_balance_rmb: int
@@ -82,6 +83,7 @@ def build_historical_signal_review(
                 base_monthly_rmb=config.base_monthly_rmb,
                 suggested_total_rmb=decision.recommendation_total_rmb,
                 core_rmb=decision.allocation.core_rmb,
+                secondary_rmb=decision.allocation.secondary_rmb,
                 qqqm_rmb=decision.allocation.growth_rmb,
                 reserve_cash_delta_rmb=decision.reserve_delta_rmb,
                 reserve_cash_balance_rmb=decision.reserve_cash_after_rmb,

@@ -46,21 +46,39 @@ def _render_condition_lines(rule: RuleEvaluation) -> str:
     )
 
 
-def _render_historical_review_table(review: HistoricalSignalReview, core_label: str) -> str:
+def _render_historical_review_table(
+    review: HistoricalSignalReview,
+    core_label: str,
+    secondary_label: str | None,
+) -> str:
     if not review.rows:
         return "_暂无可显示的历史回顾记录。_\n"
 
-    lines = [
-        f"| 月份 | 状态 | 基线金额 | 建议总投入 | {core_label} | QQQM | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
-    ]
+    if secondary_label:
+        lines = [
+            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {core_label} | {secondary_label} | QQQM | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        ]
+    else:
+        lines = [
+            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {core_label} | QQQM | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        ]
     for row in review.rows:
-        lines.append(
-            "| "
-            f"{row.month} | {state_label(row.status)} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
-            f"{row.core_rmb} | {row.qqqm_rmb} | {row.reserve_cash_delta_rmb:+d} | {row.reserve_cash_balance_rmb} | "
-            f"{rule_label(row.key_trigger_summary)} | {row.short_reason} |"
-        )
+        if secondary_label:
+            lines.append(
+                "| "
+                f"{row.month} | {state_label(row.status)} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
+                f"{row.core_rmb} | {row.secondary_rmb} | {row.qqqm_rmb} | {row.reserve_cash_delta_rmb:+d} | "
+                f"{row.reserve_cash_balance_rmb} | {rule_label(row.key_trigger_summary)} | {row.short_reason} |"
+            )
+        else:
+            lines.append(
+                "| "
+                f"{row.month} | {state_label(row.status)} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
+                f"{row.core_rmb} | {row.qqqm_rmb} | {row.reserve_cash_delta_rmb:+d} | {row.reserve_cash_balance_rmb} | "
+                f"{rule_label(row.key_trigger_summary)} | {row.short_reason} |"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -101,7 +119,11 @@ def _render_fx_section(fx_summary: FxConversionSummary, core_label: str, growth_
         f"- 汇率校验状态：{validation_label(fx_summary.validation_status)}\n"
         f"- 总投入：{format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}\n"
         f"- {core_label}：{format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}\n"
-        f"- {growth_label}：{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}\n"
+        + "".join(
+            f"- {ticker}：{format_rmb_usd_estimate(amount, fx_summary.extra_usd.get(ticker))}\n"
+            for ticker, amount in fx_summary.extra_rmb.items()
+        )
+        + f"- {growth_label}：{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}\n"
     )
 
 
@@ -109,6 +131,7 @@ def render_report(
     *,
     config: StrategyConfig,
     core: TickerIndicators,
+    secondary: TickerIndicators | None,
     growth: TickerIndicators,
     decision: StrategyDecision,
     reserve_cash_rmb: int,
@@ -140,7 +163,7 @@ def render_report(
         historical_section = (
             f"## 历史信号回顾（最近 {historical_review.months} 个月）\n\n"
             f"> {historical_review.note}\n\n"
-            f"{_render_historical_review_table(historical_review, config.core_ticker)}\n"
+            f"{_render_historical_review_table(historical_review, config.core_ticker, config.secondary_ticker)}\n"
         )
 
     execution_section = ""
@@ -150,6 +173,30 @@ def render_report(
     fx_section = ""
     if fx_summary is not None:
         fx_section = _render_fx_section(fx_summary, config.core_ticker, config.growth_ticker) + "\n"
+
+    secondary_market_line = (
+        f"- {config.secondary_ticker} 当前价格：`{secondary.current_price:.2f}`\n"
+        if secondary is not None and config.secondary_ticker
+        else ""
+    )
+    secondary_percentile_line = (
+        f"- {config.secondary_ticker} 3 年价格分位：`{secondary.price_percentile_3y:.2f}%`\n"
+        if secondary is not None and config.secondary_ticker
+        else ""
+    )
+    secondary_row = (
+        f"| {config.secondary_ticker} | {secondary.current_price:.2f} | {secondary.high_52w:.2f} | "
+        f"{secondary.drawdown_52w * 100:.2f}% | {secondary.sma200:.2f} | "
+        f"{secondary.deviation_from_sma200 * 100:.2f}% | {secondary.rsi14:.2f} | "
+        f"{secondary.price_percentile_3y:.2f}% |\n"
+        if secondary is not None and config.secondary_ticker
+        else ""
+    )
+    secondary_allocation_line = (
+        f"- {config.secondary_ticker} 建议投入金额：`{decision.allocation.secondary_rmb} RMB`\n"
+        if config.secondary_ticker
+        else ""
+    )
 
     return (
         f"# {config.strategy_name} 月度定投报告\n\n"
@@ -166,6 +213,7 @@ def render_report(
         f"{fx_section}"
         "## 市场数据\n\n"
         f"- {config.core_ticker} 当前价格：`{core.current_price:.2f}`\n"
+        f"{secondary_market_line}"
         f"- {config.growth_ticker} 当前价格：`{growth.current_price:.2f}`\n"
         f"- {config.growth_ticker} 52 周高点：`{growth.high_52w:.2f}`\n"
         f"- {config.growth_ticker} 52 周高点回撤：`{growth.drawdown_52w * 100:.2f}%`\n"
@@ -173,6 +221,7 @@ def render_report(
         f"- {config.growth_ticker} 200 日均线：`{growth.sma200:.2f}`\n"
         f"- {config.growth_ticker} RSI(14)：`{growth.rsi14:.2f}`\n"
         f"- {config.core_ticker} 3 年价格分位：`{core.price_percentile_3y:.2f}%`\n"
+        f"{secondary_percentile_line}"
         f"- {config.growth_ticker} 3 年价格分位：`{growth.price_percentile_3y:.2f}%`\n"
         f"- 当前储备金余额：`{reserve_cash_rmb} RMB`\n"
         f"- 储备金变动：`{decision.reserve_delta_rmb:+d} RMB`\n\n"
@@ -181,6 +230,7 @@ def render_report(
         "| 标的 | 当前价格 | 52 周高点 | 回撤 | 200 日均线 | 200 日均线偏离 | RSI(14) | 3 年分位 |\n"
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
         f"| {config.core_ticker} | {core.current_price:.2f} | {core.high_52w:.2f} | {core.drawdown_52w * 100:.2f}% | {core.sma200:.2f} | {core.deviation_from_sma200 * 100:.2f}% | {core.rsi14:.2f} | {core.price_percentile_3y:.2f}% |\n"
+        f"{secondary_row}"
         f"| {config.growth_ticker} | {growth.current_price:.2f} | {growth.high_52w:.2f} | {growth.drawdown_52w * 100:.2f}% | {growth.sma200:.2f} | {growth.deviation_from_sma200 * 100:.2f}% | {growth.rsi14:.2f} | {growth.price_percentile_3y:.2f}% |\n\n"
         "### 规则评估\n\n"
         f"{trigger_table}\n"
@@ -192,6 +242,7 @@ def render_report(
         "## 本月建议\n\n"
         f"- 本月建议总投入金额：`{decision.recommendation_total_rmb} RMB`\n"
         f"- {config.core_ticker} 建议投入金额：`{decision.allocation.core_rmb} RMB`\n"
+        f"{secondary_allocation_line}"
         f"- {config.growth_ticker} 建议投入金额：`{decision.allocation.growth_rmb} RMB`\n"
         f"- 本月建议动作：`{decision.action_label}`\n"
         f"- 储备金复用触发：`{decision.reserve_delta_rmb:+d} RMB`\n\n"

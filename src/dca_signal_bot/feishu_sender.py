@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from dataclasses import dataclass
@@ -9,7 +9,16 @@ from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
 from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
 from .indicators import TickerIndicators
-from .presentation import mode_label, order_type_label, outside_rth_label, session_label, state_label, tif_label, validation_label, yes_no
+from .presentation import (
+    mode_label,
+    order_type_label,
+    outside_rth_label,
+    session_label,
+    state_label,
+    tif_label,
+    validation_label,
+    yes_no,
+)
 from .strategy_engine import StrategyDecision
 
 
@@ -54,20 +63,26 @@ def build_summary_text(
     _ = growth
     mode_line = mode_label(run_mode_label)
     lines = [
-        f"\u65e5\u671f\uff1a{report_date}",
-        f"\u8fd0\u884c\u6a21\u5f0f\uff1a{mode_line}",
-        f"\u72b6\u6001\uff1a{state_label(decision.state_label)} (`{decision.state_label}`)",
-        f"\u603b\u6295\u5165\uff1a{decision.recommendation_total_rmb} RMB",
-        f"{config.core_ticker}\uff1a{decision.allocation.core_rmb} RMB",
-        f"{config.growth_ticker}\uff1a{decision.allocation.growth_rmb} RMB",
-        f"\u50a8\u5907\u91d1\u53d8\u52a8\uff1a{decision.reserve_delta_rmb:+d} RMB",
-        f"\u50a8\u5907\u91d1\u4f59\u989d\uff1a{decision.reserve_cash_after_rmb} RMB",
-        f"\u6570\u636e\u6e90\uff1a{data_source}",
-        f"\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1a{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
-        f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_label(validation_status)} (`{validation_status}`)",
-        f"\u539f\u56e0\uff1a{decision.reasons[-1]}",
-        f"\u62a5\u544a\uff1a{report_path}",
+        f"日期：{report_date}",
+        f"运行模式：{mode_line}",
+        f"状态：{state_label(decision.state_label)} (`{decision.state_label}`)",
+        f"总投入：{decision.recommendation_total_rmb} RMB",
+        f"{config.core_ticker}：{decision.allocation.core_rmb} RMB",
     ]
+    if config.secondary_ticker:
+        lines.append(f"{config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
+    lines.extend(
+        [
+            f"{config.growth_ticker}：{decision.allocation.growth_rmb} RMB",
+            f"储备金变动：{decision.reserve_delta_rmb:+d} RMB",
+            f"储备金余额：{decision.reserve_cash_after_rmb} RMB",
+            f"数据源：{data_source}",
+            f"最新市场日期：{config.core_ticker} {latest_market_date_core.isoformat()} / {config.growth_ticker} {latest_market_date_qqqm.isoformat()}",
+            f"校验状态：{validation_label(validation_status)} (`{validation_status}`)",
+            f"原因：{decision.reasons[-1]}",
+            f"报告：{report_path}",
+        ]
+    )
 
     if execution_guidance is not None:
         lines.extend(
@@ -88,6 +103,17 @@ def build_summary_text(
                 "美元估算：",
                 f"- 总投入：{format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}",
                 f"- {config.core_ticker}：{format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}",
+            ]
+        )
+        if fx_summary.extra_rmb:
+            lines.extend(
+                [
+                    f"- {ticker}：{format_rmb_usd_estimate(amount, fx_summary.extra_usd.get(ticker))}"
+                    for ticker, amount in fx_summary.extra_rmb.items()
+                ]
+            )
+        lines.extend(
+            [
                 f"- {config.growth_ticker}：{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}",
                 f"- 汇率来源：{fx_summary.source}",
                 f"- 汇率校验状态：{validation_label(fx_summary.validation_status)}",
@@ -112,13 +138,13 @@ def build_failure_alert_text(
 ) -> str:
     return "\n".join(
         [
-            "\u6570\u636e\u6821\u9a8c\u5931\u8d25\uff0c\u672a\u751f\u6210\u53ef\u4fe1\u62a5\u544a\u3002",
-            f"\u65f6\u95f4\uff1a{_utc_iso(fetched_at_utc)}",
-            f"\u6807\u7684\u7ec4\u5408\uff1a{core_ticker} + {growth_ticker}",
-            f"\u6570\u636e\u6e90\uff1a{data_source}",
-            "\u6700\u65b0\u5e02\u573a\u65e5\u671f\uff1aN/A",
-            f"\u6821\u9a8c\u72b6\u6001\uff1a{validation_label(validation_status)} (`{validation_status}`)",
-            f"\u9519\u8bef\uff1a{error}",
+            "数据校验失败，未生成可信报告。",
+            f"时间：{_utc_iso(fetched_at_utc)}",
+            f"标的组合：{core_ticker} + {growth_ticker}",
+            f"数据源：{data_source}",
+            "最新市场日期：N/A",
+            f"校验状态：{validation_label(validation_status)} (`{validation_status}`)",
+            f"错误：{error}",
         ]
     )
 

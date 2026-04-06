@@ -80,6 +80,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
                 base_monthly_rmb=3000,
                 suggested_total_rmb=2500,
                 core_rmb=2200,
+                secondary_rmb=0,
                 qqqm_rmb=300,
                 reserve_cash_delta_rmb=500,
                 reserve_cash_balance_rmb=500,
@@ -119,12 +120,15 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
+        extra_rmb={},
+        extra_usd={},
         note="汇率换算完成。",
     )
 
     markdown = render_report(
         config=config,
         core=core,
+        secondary=None,
         growth=growth,
         decision=decision,
         reserve_cash_rmb=200,

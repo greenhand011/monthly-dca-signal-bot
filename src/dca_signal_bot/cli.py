@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from .config import load_strategy_config
+from .config import apply_base_override, load_strategy_config
 from .data_fetcher import DATA_SOURCE, DataFetchError, fetch_histories
 from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
 from .execution_guidance import build_execution_guidance
@@ -88,7 +88,7 @@ def _run(
     config = load_strategy_config(config_path)
     if base_monthly_rmb is not None and base_monthly_rmb <= 0:
         raise ValueError("base_monthly_rmb must be positive")
-    effective_config = config if base_monthly_rmb is None else replace(config, base_monthly_rmb=base_monthly_rmb)
+    effective_config = apply_base_override(config, base_monthly_rmb)
     if review_months < 1:
         raise ValueError("review_months must be at least 1")
     simulation_mode = base_monthly_rmb is not None and base_monthly_rmb != config.base_monthly_rmb
@@ -102,17 +102,30 @@ def _run(
     fetched_at_utc = datetime.now(timezone.utc)
 
     try:
+        tickers = [effective_config.core_ticker, effective_config.growth_ticker]
+        if effective_config.secondary_ticker:
+            tickers.insert(1, effective_config.secondary_ticker)
         bundle = fetch_histories(
-            [config.core_ticker, config.growth_ticker],
+            tickers,
             reference_date=report_date,
             fetched_at_utc=fetched_at_utc,
         )
 
         core_history = bundle.histories[effective_config.core_ticker]
         growth_history = bundle.histories[effective_config.growth_ticker]
+        secondary_history = (
+            bundle.histories[effective_config.secondary_ticker]
+            if effective_config.secondary_ticker
+            else None
+        )
 
         core_indicators = compute_ticker_indicators(core_history.history, effective_config.core_ticker)
         growth_indicators = compute_ticker_indicators(growth_history.history, effective_config.growth_ticker)
+        secondary_indicators = (
+            compute_ticker_indicators(secondary_history.history, effective_config.secondary_ticker)
+            if secondary_history is not None and effective_config.secondary_ticker
+            else None
+        )
 
         decision = evaluate_strategy(
             config=effective_config,
@@ -130,12 +143,16 @@ def _run(
                 suggest_outside_rth=effective_config.suggest_outside_rth,
                 now_utc=fetched_at_utc,
             )
+        extra_rmb: dict[str, int] = {}
+        if effective_config.secondary_ticker:
+            extra_rmb[effective_config.secondary_ticker] = decision.allocation.secondary_rmb
         fx_summary = build_fx_conversion_summary(
             total_rmb=decision.recommendation_total_rmb,
             core_rmb=decision.allocation.core_rmb,
             growth_rmb=decision.allocation.growth_rmb,
             reference_date=report_date,
             fetched_at_utc=fetched_at_utc,
+            extra_rmb=extra_rmb,
         )
 
         report_path = report_path_for(reports_dir, report_date)
@@ -148,6 +165,7 @@ def _run(
         report_markdown = render_report(
             config=effective_config,
             core=core_indicators,
+            secondary=secondary_indicators,
             growth=growth_indicators,
             decision=decision,
             reserve_cash_rmb=reserve_after_rmb,
@@ -205,6 +223,8 @@ def _run(
         print(f"数据来源：{bundle.data_source}")
         print(f"总投入建议：{decision.recommendation_total_rmb} RMB")
         print(f"{effective_config.core_ticker}：{decision.allocation.core_rmb} RMB")
+        if effective_config.secondary_ticker:
+            print(f"{effective_config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
         print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
         print(f"储备金余额：{reserve_after_rmb} RMB")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")

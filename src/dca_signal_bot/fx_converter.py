@@ -42,6 +42,8 @@ class FxConversionSummary:
     total_usd: float | None
     core_usd: float | None
     growth_usd: float | None
+    extra_rmb: dict[str, int]
+    extra_usd: dict[str, float]
     note: str
 
 
@@ -162,6 +164,7 @@ def build_fx_conversion_summary(
     reference_date: date,
     fetched_at_utc: datetime | None = None,
     ticker: str = FX_PAIR_TICKER,
+    extra_rmb: dict[str, int] | None = None,
 ) -> FxConversionSummary:
     fetched_at_utc = fetched_at_utc or _utc_now()
     try:
@@ -181,12 +184,16 @@ def build_fx_conversion_summary(
             total_usd=None,
             core_usd=None,
             growth_usd=None,
+            extra_rmb=dict(extra_rmb or {}),
+            extra_usd={},
             note=f"由于汇率抓取或校验失败，美元估算不可用：{exc}",
         )
 
     total_usd = convert_rmb_to_usd(total_rmb, snapshot.rate_cny_per_usd)
     core_usd = convert_rmb_to_usd(core_rmb, snapshot.rate_cny_per_usd)
     growth_usd = convert_rmb_to_usd(growth_rmb, snapshot.rate_cny_per_usd)
+    extra_rmb = dict(extra_rmb or {})
+    extra_usd = {ticker: convert_rmb_to_usd(value, snapshot.rate_cny_per_usd) for ticker, value in extra_rmb.items()}
     return FxConversionSummary(
         source=snapshot.source,
         pair_ticker=snapshot.pair_ticker,
@@ -201,6 +208,8 @@ def build_fx_conversion_summary(
         total_usd=total_usd,
         core_usd=core_usd,
         growth_usd=growth_usd,
+        extra_rmb=extra_rmb,
+        extra_usd=extra_usd,
         note="汇率换算完成。",
     )
 

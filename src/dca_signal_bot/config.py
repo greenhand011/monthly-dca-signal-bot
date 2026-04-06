@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -58,8 +58,10 @@ class StrategyConfig:
     base_monthly_rmb: int = 3000
     reserve_cap_multiple: float = 2.0
     core_ticker: str = "VOO"
+    secondary_ticker: str | None = None
     growth_ticker: str = "QQQM"
     core_weight_normal: float = 0.85
+    secondary_weight_normal: float = 0.0
     growth_weight_normal: float = 0.15
     feishu_enabled: bool = False
     report_timezone: str = "Asia/Shanghai"
@@ -71,10 +73,43 @@ class StrategyConfig:
     thresholds: dict[str, dict[str, Any]] = field(
         default_factory=lambda: {name: dict(values) for name, values in DEFAULT_THRESHOLDS.items()}
     )
+    base_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def reserve_cap_rmb(self) -> int:
         return int(round(self.base_monthly_rmb * self.reserve_cap_multiple))
+
+
+def apply_base_override(config: StrategyConfig, base_monthly_rmb: int | None) -> StrategyConfig:
+    if base_monthly_rmb is None:
+        return config
+    overrides = config.base_overrides.get(str(base_monthly_rmb))
+    if not overrides:
+        return replace(config, base_monthly_rmb=base_monthly_rmb)
+
+    secondary_override = overrides.get("secondary_ticker", config.secondary_ticker)
+    if isinstance(secondary_override, dict) and not secondary_override:
+        secondary_override = None
+    updated = replace(
+        config,
+        base_monthly_rmb=base_monthly_rmb,
+        core_ticker=str(overrides.get("core_ticker", config.core_ticker)),
+        secondary_ticker=secondary_override,
+        growth_ticker=str(overrides.get("growth_ticker", config.growth_ticker)),
+        core_weight_normal=float(overrides.get("core_weight_normal", config.core_weight_normal)),
+        secondary_weight_normal=float(overrides.get("secondary_weight_normal", config.secondary_weight_normal)),
+        growth_weight_normal=float(overrides.get("growth_weight_normal", config.growth_weight_normal)),
+    )
+    return updated
+
+
+def _validate_weights(core_weight: float, secondary_weight: float, growth_weight: float) -> None:
+    total = core_weight + secondary_weight + growth_weight
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError(
+            "Normal weights must sum to 1.0; "
+            f"got core={core_weight:.4f}, secondary={secondary_weight:.4f}, growth={growth_weight:.4f}"
+        )
 
 
 def _deep_merge(default: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
@@ -160,14 +195,33 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
     path = Path(path)
     raw = load_yaml_file(path)
     merged_thresholds = _deep_merge(DEFAULT_THRESHOLDS, raw.get("thresholds", {}) or {})
+    base_overrides = raw.get("base_overrides", {}) or {}
+    if not isinstance(base_overrides, dict):
+        raise ValueError("base_overrides must be a mapping of base_monthly_rmb to override settings")
+    normalized_overrides: dict[str, dict[str, Any]] = {}
+    for key, value in base_overrides.items():
+        normalized_key = str(key).strip().strip('"').strip("'")
+        if isinstance(value, dict):
+            normalized_overrides[normalized_key] = value
+        else:
+            raise ValueError("base_overrides values must be mappings of override settings")
 
-    return StrategyConfig(
+    def normalize_optional_ticker(value: Any) -> str | None:
+        if value in ("", None):
+            return None
+        if isinstance(value, dict) and not value:
+            return None
+        return str(value)
+
+    config = StrategyConfig(
         strategy_name=str(raw.get("strategy_name", "monthly-dca-signal-bot")),
         base_monthly_rmb=int(raw.get("base_monthly_rmb", 3000)),
         reserve_cap_multiple=float(raw.get("reserve_cap_multiple", 2.0)),
         core_ticker=str(raw.get("core_ticker", "VOO")),
+        secondary_ticker=normalize_optional_ticker(raw.get("secondary_ticker")),
         growth_ticker=str(raw.get("growth_ticker", "QQQM")),
         core_weight_normal=float(raw.get("core_weight_normal", 0.85)),
+        secondary_weight_normal=float(raw.get("secondary_weight_normal", 0.0)),
         growth_weight_normal=float(raw.get("growth_weight_normal", 0.15)),
         feishu_enabled=bool(raw.get("feishu_enabled", False)),
         report_timezone=str(raw.get("report_timezone", "Asia/Shanghai")),
@@ -177,4 +231,13 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         preferred_tif=str(raw.get("preferred_tif", "DAY")),
         suggest_outside_rth=bool(raw.get("suggest_outside_rth", True)),
         thresholds=merged_thresholds,
+        base_overrides=normalized_overrides,
     )
+    _validate_weights(config.core_weight_normal, config.secondary_weight_normal, config.growth_weight_normal)
+    for override in base_overrides.values():
+        _validate_weights(
+            float(override.get("core_weight_normal", config.core_weight_normal)),
+            float(override.get("secondary_weight_normal", config.secondary_weight_normal)),
+            float(override.get("growth_weight_normal", config.growth_weight_normal)),
+        )
+    return config

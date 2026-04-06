@@ -31,6 +31,8 @@ def _fake_bundle() -> MarketDataBundle:
     histories = {
         "VOO": TickerHistory("VOO", _make_history(400.0), pd.Timestamp("2026-03-27").date(), 1100),
         "QQQM": TickerHistory("QQQM", _make_history(450.0), pd.Timestamp("2026-03-27").date(), 1100),
+        "SPLG": TickerHistory("SPLG", _make_history(300.0), pd.Timestamp("2026-03-27").date(), 1100),
+        "VXUS": TickerHistory("VXUS", _make_history(200.0), pd.Timestamp("2026-03-27").date(), 1100),
     }
     return MarketDataBundle(
         data_source=DATA_SOURCE,
@@ -55,6 +57,8 @@ def _fake_fx_summary() -> FxConversionSummary:
         total_usd=416.67,
         core_usd=354.17,
         growth_usd=62.5,
+        extra_rmb={},
+        extra_usd={},
         note="汇率换算完成。",
     )
 
@@ -86,9 +90,9 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     )
 
     assert code == 0
-    report_file = reports_dir / "2026-03-report.md"
-    assert report_file.exists()
-    content = report_file.read_text(encoding="utf-8")
+    report_files = list(reports_dir.glob("*.md"))
+    assert len(report_files) == 1
+    content = report_files[0].read_text(encoding="utf-8")
     assert "## 信号触发详情" in content
     assert "## IBKR 执行建议" in content
     assert "## 美元估算" in content
@@ -164,14 +168,16 @@ def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch)
     )
 
     assert code == 0
-    report_file = reports_dir / "2026-03-report.md"
-    assert report_file.exists()
-    content = report_file.read_text(encoding="utf-8")
+    report_files = list(reports_dir.glob("*.md"))
+    assert len(report_files) == 1
+    content = report_files[0].read_text(encoding="utf-8")
     assert "模拟模式：基线月投金额 = 6000" in content
     assert "## IBKR 执行建议" in content
     assert "## 美元估算" in content
     assert "## 历史信号回顾（最近 6 个月）" in content
-    assert "VOO" in content
+    assert "SPLG" in content
+    assert "VXUS" in content
+    assert "QQQM" in content
     assert json.loads(state_file.read_text(encoding="utf-8")) == original_state
 
 
@@ -200,7 +206,8 @@ def test_cli_success_path_fails_when_feishu_notification_fails(monkeypatch):
     )
 
     assert code == 4
-    assert (reports_dir / "2026-03-report.md").exists()
+    report_files = list(reports_dir.glob("*.md"))
+    assert len(report_files) == 1
     assert state_file.exists()
 
 

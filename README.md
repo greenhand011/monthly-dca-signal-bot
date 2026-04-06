@@ -147,8 +147,10 @@ Important fields:
 - `base_monthly_rmb`
 - `reserve_cap_multiple`
 - `core_ticker`
+- `secondary_ticker`
 - `growth_ticker`
 - `core_weight_normal`
+- `secondary_weight_normal`
 - `growth_weight_normal`
 - `feishu_enabled`
 - `report_timezone`
@@ -158,6 +160,7 @@ Important fields:
 - `preferred_order_type`
 - `preferred_tif`
 - `suggest_outside_rth`
+- `base_overrides`
 
 ## 如何把基线从 3000 改到 6000
 
@@ -166,6 +169,14 @@ Update:
 ```yaml
 base_monthly_rmb: 6000
 ```
+
+当 `base_monthly_rmb=6000` 时，默认启用以下基础搭配（可在 `base_overrides` 中调整）：
+
+- SPLG：4200 RMB
+- VXUS：1200 RMB
+- QQQM：600 RMB
+
+这对应 `70% / 20% / 10%` 的结构，依旧沿用既定的 QQQM 信号判断逻辑。
 
 这就是正式策略的实际改动。如果你只想观察效果、但不想改动正式状态，请使用 CLI 的模拟参数：
 
