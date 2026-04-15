@@ -107,6 +107,7 @@ jobs:
               data_source="Yahoo Finance via yfinance",
               fetched_at_utc=datetime.now(timezone.utc),
               core_ticker="VOO",
+              secondary_ticker="VXUS",
               growth_ticker="QQQM",
               validation_status="FAIL",
           )

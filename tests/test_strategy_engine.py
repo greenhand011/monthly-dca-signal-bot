@@ -71,8 +71,9 @@ def test_normal_rule_applies_when_no_other_rule_matches():
     assert result.state_label == "NORMAL"
     assert result.action_label == ACTION_NORMAL
     assert result.recommendation_total_rmb == 3000
-    assert result.allocation.core_rmb == 2550
-    assert result.allocation.growth_rmb == 450
+    assert result.allocation.core_rmb == 2100
+    assert result.allocation.secondary_rmb == 600
+    assert result.allocation.growth_rmb == 300
 
 
 def test_heat_rule_reduces_monthly_amount_and_adds_reserve():
@@ -171,7 +172,7 @@ def test_execution_guidance_settings_do_not_change_strategy_outputs():
     assert guidance_enabled == baseline
 
 
-def test_base_override_6000_uses_splg_vxus_qqqm_allocation():
+def test_base_override_6000_keeps_voo_vxus_qqqm_allocation():
     config = load_strategy_config("config/strategy.yaml")
     override = apply_base_override(config, 6000)
     growth = _indicator(
@@ -188,7 +189,7 @@ def test_base_override_6000_uses_splg_vxus_qqqm_allocation():
 
     result = evaluate_strategy(override, _core_indicator(), growth, ReserveState(reserve_cash_rmb=0))
 
-    assert override.core_ticker == "SPLG"
+    assert override.core_ticker == "VOO"
     assert override.secondary_ticker == "VXUS"
     assert override.growth_ticker == "QQQM"
     assert result.recommendation_total_rmb == 6000

@@ -57,6 +57,18 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         rsi14=55.0,
         price_percentile_3y=60.0,
     )
+    secondary = _indicator(
+        "VXUS",
+        price=62.0,
+        high_52w=65.0,
+        drawdown_52w=0.0462,
+        sma200=60.0,
+        deviation_from_sma200=0.0333,
+        sma20=61.0,
+        deviation_from_sma20=0.0164,
+        rsi14=52.0,
+        price_percentile_3y=58.0,
+    )
     growth = _indicator(
         "QQQM",
         price=108.0,
@@ -79,9 +91,9 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
                 status="HEAT",
                 base_monthly_rmb=3000,
                 suggested_total_rmb=2500,
-                core_rmb=2200,
-                secondary_rmb=0,
-                qqqm_rmb=300,
+                core_rmb=1750,
+                secondary_rmb=500,
+                qqqm_rmb=250,
                 reserve_cash_delta_rmb=500,
                 reserve_cash_balance_rmb=500,
                 key_trigger_summary="HEAT",
@@ -117,18 +129,18 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         total_rmb=decision.recommendation_total_rmb,
         core_rmb=decision.allocation.core_rmb,
         growth_rmb=decision.allocation.growth_rmb,
-        total_usd=416.67,
-        core_usd=354.17,
-        growth_usd=62.5,
-        extra_rmb={},
-        extra_usd={},
+        total_usd=round(decision.recommendation_total_rmb / 7.2, 2),
+        core_usd=round(decision.allocation.core_rmb / 7.2, 2),
+        growth_usd=round(decision.allocation.growth_rmb / 7.2, 2),
+        extra_rmb={"VXUS": decision.allocation.secondary_rmb},
+        extra_usd={"VXUS": round(decision.allocation.secondary_rmb / 7.2, 2)},
         note="汇率换算完成。",
     )
 
     markdown = render_report(
         config=config,
         core=core,
-        secondary=None,
+        secondary=secondary,
         growth=growth,
         decision=decision,
         reserve_cash_rmb=200,
@@ -136,6 +148,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         data_source="Yahoo Finance via yfinance",
         fetched_at_utc=pd.Timestamp("2026-03-28T03:15:20Z").to_pydatetime(),
         latest_market_date_core=pd.Timestamp("2026-03-27").date(),
+        latest_market_date_secondary=pd.Timestamp("2026-03-27").date(),
         latest_market_date_qqqm=pd.Timestamp("2026-03-27").date(),
         validation_status="PASS",
         run_mode_label="模拟模式：基线月投金额 = 6000",
@@ -159,4 +172,5 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     assert "2026-03" in markdown
     assert "储备金变动" in markdown
     assert "VOO" in markdown
-    assert f"总投入：{decision.recommendation_total_rmb} RMB（约 USD 416.67）" in markdown
+    assert "VXUS" in markdown
+    assert f"{decision.recommendation_total_rmb} RMB（约 USD {fx_summary.total_usd:.2f}）" in markdown

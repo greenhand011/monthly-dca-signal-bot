@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import replace
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from .config import apply_base_override, load_strategy_config
 from .data_fetcher import DATA_SOURCE, DataFetchError, fetch_histories
-from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
 from .execution_guidance import build_execution_guidance
+from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
 from .fx_converter import build_fx_conversion_summary
 from .historical_review import build_historical_signal_review
 from .indicators import IndicatorComputationError, compute_ticker_indicators
@@ -44,7 +43,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="How many recent month-end snapshots to include in the historical signal review.",
     )
     run_parser.add_argument("--dry-run", action="store_true", help="Do not send Feishu notifications.")
-
     return parser
 
 
@@ -55,18 +53,20 @@ def _maybe_send_failure_alert(
     error: str,
     fetched_at_utc: datetime,
     core_ticker: str,
+    secondary_ticker: str | None,
     growth_ticker: str,
 ) -> bool:
     if dry_run:
         return False
     if not webhook_url:
-        raise FeishuError("FEISHU_WEBHOOK_URL is missing or blank")
+        raise FeishuError("FEISHU_WEBHOOK_URL 为空或未配置")
 
     text = build_failure_alert_text(
         error=error,
         data_source=DATA_SOURCE,
         fetched_at_utc=fetched_at_utc,
         core_ticker=core_ticker,
+        secondary_ticker=secondary_ticker,
         growth_ticker=growth_ticker,
         validation_status="FAIL",
     )
@@ -88,23 +88,25 @@ def _run(
     config = load_strategy_config(config_path)
     if base_monthly_rmb is not None and base_monthly_rmb <= 0:
         raise ValueError("base_monthly_rmb must be positive")
-    effective_config = apply_base_override(config, base_monthly_rmb)
     if review_months < 1:
         raise ValueError("review_months must be at least 1")
+
+    effective_config = apply_base_override(config, base_monthly_rmb)
     simulation_mode = base_monthly_rmb is not None and base_monthly_rmb != config.base_monthly_rmb
     run_mode_label = (
-        f"模拟模式：基线月投金额 = {effective_config.base_monthly_rmb}"
-        if simulation_mode
-        else None
+        f"模拟模式：基线月投金额 = {effective_config.base_monthly_rmb}" if simulation_mode else None
     )
+
     reserve_state = load_state(state_file)
     report_date = datetime.now(ZoneInfo(config.report_timezone)).date()
     fetched_at_utc = datetime.now(timezone.utc)
 
     try:
-        tickers = [effective_config.core_ticker, effective_config.growth_ticker]
+        tickers = [effective_config.core_ticker]
         if effective_config.secondary_ticker:
-            tickers.insert(1, effective_config.secondary_ticker)
+            tickers.append(effective_config.secondary_ticker)
+        tickers.append(effective_config.growth_ticker)
+
         bundle = fetch_histories(
             tickers,
             reference_date=report_date,
@@ -133,7 +135,7 @@ def _run(
             growth_indicators=growth_indicators,
             reserve_state=reserve_state,
         )
-        reserve_after_rmb = decision.reserve_cash_after_rmb
+
         execution_guidance = None
         if effective_config.execution_guidance_enabled:
             execution_guidance = build_execution_guidance(
@@ -143,6 +145,7 @@ def _run(
                 suggest_outside_rth=effective_config.suggest_outside_rth,
                 now_utc=fetched_at_utc,
             )
+
         extra_rmb: dict[str, int] = {}
         if effective_config.secondary_ticker:
             extra_rmb[effective_config.secondary_ticker] = decision.allocation.secondary_rmb
@@ -155,24 +158,26 @@ def _run(
             extra_rmb=extra_rmb,
         )
 
-        report_path = report_path_for(reports_dir, report_date)
         historical_review = build_historical_signal_review(
             config=effective_config,
             core_history=core_history.history,
             growth_history=growth_history.history,
             months=review_months,
         )
+
+        report_path = report_path_for(reports_dir, report_date)
         report_markdown = render_report(
             config=effective_config,
             core=core_indicators,
             secondary=secondary_indicators,
             growth=growth_indicators,
             decision=decision,
-            reserve_cash_rmb=reserve_after_rmb,
+            reserve_cash_rmb=decision.reserve_cash_after_rmb,
             report_date=report_date,
             data_source=bundle.data_source,
             fetched_at_utc=bundle.fetched_at_utc,
             latest_market_date_core=core_history.latest_market_date,
+            latest_market_date_secondary=secondary_history.latest_market_date if secondary_history is not None else None,
             latest_market_date_qqqm=growth_history.latest_market_date,
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
@@ -183,7 +188,7 @@ def _run(
         report_path.write_text(report_markdown, encoding="utf-8")
 
         if not simulation_mode:
-            reserve_state.reserve_cash_rmb = reserve_after_rmb
+            reserve_state.reserve_cash_rmb = decision.reserve_cash_after_rmb
             reserve_state.last_run_at = utc_now_iso()
             reserve_state.last_status = decision.state_label
             reserve_state.last_recommendation_total_rmb = decision.recommendation_total_rmb
@@ -197,6 +202,7 @@ def _run(
             report_date=report_date.isoformat(),
             data_source=bundle.data_source,
             latest_market_date_core=core_history.latest_market_date,
+            latest_market_date_secondary=secondary_history.latest_market_date if secondary_history is not None else None,
             latest_market_date_qqqm=growth_history.latest_market_date,
             validation_status=bundle.validation_status,
             run_mode_label=run_mode_label,
@@ -226,11 +232,11 @@ def _run(
         if effective_config.secondary_ticker:
             print(f"{effective_config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
         print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
-        print(f"储备金余额：{reserve_after_rmb} RMB")
+        print(f"储备金余额：{decision.reserve_cash_after_rmb} RMB")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(
             "IBKR 当前交易阶段："
-            f"{session_label(execution_guidance.session_phase) if execution_guidance is not None else '已关闭'}"
+            f"{session_label(execution_guidance.session_phase) if execution_guidance is not None else '未启用'}"
         )
         print(f"报告已写入：{report_path}")
         print(f"状态文件已写入：{state_file if not simulation_mode else '模拟模式下已跳过'}")
@@ -244,8 +250,9 @@ def _run(
                 dry_run=dry_run,
                 error=failure_text,
                 fetched_at_utc=fetched_at_utc,
-                core_ticker=config.core_ticker,
-                growth_ticker=config.growth_ticker,
+                core_ticker=effective_config.core_ticker,
+                secondary_ticker=effective_config.secondary_ticker,
+                growth_ticker=effective_config.growth_ticker,
             )
         except FeishuError as notify_exc:
             print(f"[错误] 失败告警发送失败：{notify_exc}")
@@ -276,7 +283,6 @@ def main(argv: list[str] | None = None) -> int:
             base_monthly_rmb=args.base_monthly_rmb,
             review_months=args.review_months,
         )
-
     return 0
 
 

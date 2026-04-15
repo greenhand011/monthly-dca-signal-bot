@@ -2,11 +2,11 @@ strategy_name: monthly-dca-signal-bot
 base_monthly_rmb: 3000
 reserve_cap_multiple: 2.0
 core_ticker: VOO
-secondary_ticker:
+secondary_ticker: VXUS
 growth_ticker: QQQM
-core_weight_normal: 0.85
-secondary_weight_normal: 0.0
-growth_weight_normal: 0.15
+core_weight_normal: 0.70
+secondary_weight_normal: 0.20
+growth_weight_normal: 0.10
 feishu_enabled: false
 report_timezone: Asia/Shanghai
 execution_guidance_enabled: true
@@ -14,15 +14,6 @@ user_timezone: Asia/Tokyo
 preferred_order_type: LIMIT
 preferred_tif: DAY
 suggest_outside_rth: true
-
-base_overrides:
-  "6000":
-    core_ticker: SPLG
-    secondary_ticker: VXUS
-    growth_ticker: QQQM
-    core_weight_normal: 0.70
-    secondary_weight_normal: 0.20
-    growth_weight_normal: 0.10
 
 thresholds:
   extreme_heat:

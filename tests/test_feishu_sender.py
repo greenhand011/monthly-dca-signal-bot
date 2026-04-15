@@ -93,12 +93,12 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         action_label="原样投",
         recommendation_total_rmb=3000,
         allocation=AllocationBreakdown(
-            core_rmb=2550,
-            secondary_rmb=0,
-            growth_rmb=450,
-            core_weight=0.85,
-            secondary_weight=0.0,
-            growth_weight=0.15,
+            core_rmb=2100,
+            secondary_rmb=600,
+            growth_rmb=300,
+            core_weight=0.70,
+            secondary_weight=0.20,
+            growth_weight=0.10,
         ),
         reserve_delta_rmb=0,
         reserve_cash_after_rmb=0,
@@ -129,24 +129,25 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         validation_status="PASS",
         rate_cny_per_usd=7.2,
         total_rmb=3000,
-        core_rmb=2550,
-        growth_rmb=450,
+        core_rmb=2100,
+        growth_rmb=300,
         total_usd=416.67,
-        core_usd=354.17,
-        growth_usd=62.5,
-        extra_rmb={},
-        extra_usd={},
+        core_usd=291.67,
+        growth_usd=41.67,
+        extra_rmb={"VXUS": 600},
+        extra_usd={"VXUS": 83.33},
         note="汇率换算完成。",
     )
 
     summary = build_summary_text(
-        config=SimpleNamespace(core_ticker="VOO", secondary_ticker=None, growth_ticker="QQQM"),
+        config=SimpleNamespace(core_ticker="VOO", secondary_ticker="VXUS", growth_ticker="QQQM"),
         growth=object(),
         decision=decision,
         report_path="reports/2026-03-report.md",
         report_date="2026-03-30",
         data_source="Yahoo Finance via yfinance",
         latest_market_date_core=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        latest_market_date_secondary=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
         latest_market_date_qqqm=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
         validation_status="PASS",
         run_mode_label="正式模式",
@@ -157,5 +158,6 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
     assert "IBKR 执行建议：" in summary
     assert "美元估算：" in summary
     assert "总投入：3000 RMB（约 USD 416.67）" in summary
-    assert "VOO：2550 RMB（约 USD 354.17）" in summary
-    assert "QQQM：450 RMB（约 USD 62.50）" in summary
+    assert "VOO：2100 RMB（约 USD 291.67）" in summary
+    assert "VXUS：600 RMB（约 USD 83.33）" in summary
+    assert "QQQM：300 RMB（约 USD 41.67）" in summary

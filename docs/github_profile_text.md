@@ -2,20 +2,21 @@
 
 ## 仓库描述建议
 
-Monthly DCA execution assistant for `VOO + QQQM` with real market data, fail-fast validation, Feishu notifications, IBKR execution guidance, and USD estimates.
+Monthly DCA execution assistant for `VOO + VXUS + QQQM` with real market data, fail-fast validation, Feishu notifications, IBKR execution guidance, and USD estimates.
 
 ## 中文短描述
 
-面向 `VOO + QQQM` 的月度定投执行助手，基于真实行情生成报告，支持飞书通知、IBKR 执行建议和美元估算。
+面向 `VOO + VXUS + QQQM` 的月度定投执行助手，基于真实行情生成报告，支持飞书通知、IBKR 执行建议和美元估算。
 
 ## English Short Description
 
-A real-data monthly DCA execution assistant for `VOO + QQQM`, with fail-fast validation, Feishu notifications, IBKR execution guidance, and USD estimates.
+A real-data monthly DCA execution assistant for `VOO + VXUS + QQQM`, with fail-fast validation, Feishu notifications, IBKR execution guidance, and USD estimates.
 
 ## Suggested Topics
 
 - monthly-dca
 - voo
+- vxus
 - qqqm
 - yfinance
 - yahoo-finance
