@@ -1,4 +1,5 @@
 strategy_name: monthly-dca-signal-bot
+strategy_mode: manual_total_per_asset_signal
 base_monthly_rmb: 3000
 reserve_cap_multiple: 2.0
 core_ticker: VOO

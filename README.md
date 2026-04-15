@@ -1,6 +1,6 @@
 # monthly-dca-signal-bot
 
-一句话总结：一个基于真实线上行情的月度定投执行助手，默认围绕 `VOO + VXUS + QQQM` 生成 RMB 主导的月度建议，并附带飞书通知、IBKR 执行建议和美元估算，只有在 fail-fast 校验通过后才输出正式建议。
+一句话总结：一个基于真实线上行情的月度定投执行助手，默认使用“手动设定总投入 + `VOO / VXUS / QQQM` 独立资产信号 + 固定总额内部分配调整”模式，并附带飞书通知、IBKR 执行建议和美元估算。
 
 ## 中文简介
 
@@ -8,9 +8,9 @@
 
 它主要解决这些问题：
 
-- 每个月该投多少
-- `VOO`、`VXUS` 和 `QQQM` 怎么分配
-- 当前市场状态是正常、过热还是回撤
+- 每个月总投入设多少
+- `VOO`、`VXUS` 和 `QQQM` 各自本月应不应该适度高配或低配
+- 在总投入固定的前提下，三只 ETF 之间应该怎样调整分配
 - 如果你在 IBKR 手动执行，现在更适合怎样下单
 - 如果你想观察未来把月投基线从 `3000 RMB` 调到 `6000 RMB` 会怎样变化，如何安全模拟而不污染正式状态
 
@@ -18,7 +18,7 @@
 
 `monthly-dca-signal-bot` is a small open-source monthly DCA execution assistant. It is intentionally not a prediction engine and not an automated trading bot. It fetches real market data, validates it strictly, applies a simple rule set, and produces a monthly recommendation that is easy to review and execute manually.
 
-The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations as the source of truth, and optionally adds Feishu notifications, IBKR execution guidance, and USD estimates for execution convenience.
+The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations as the source of truth, and applies independent per-asset tactical signals while holding the monthly total contribution fixed.
 
 ## Why This Project Exists
 
@@ -31,7 +31,8 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 
 - 使用 Yahoo Finance via `yfinance` 获取真实历史行情
 - 严格校验 `VOO`、`VXUS`、`QQQM` 的市场数据是否完整、足够新、足够长
-- 基于既定的 QQQM 信号规则给出月度总投入与 ETF 分配建议
+- 基于 `VOO`、`VXUS`、`QQQM` 各自独立信号给出资产级高配/低配建议
+- 在总投入固定的前提下输出每个资产的基线金额、调整幅度和最终建议金额
 - 生成 Markdown 月报到 `reports/YYYY-MM-report.md`
 - 仅在正式模式成功运行后更新 `state/reserve_state.json`
 - 按需发送飞书摘要
@@ -55,6 +56,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 - 默认基线月投：`3000 RMB`
 - `3000 RMB` 示例：`VOO 2100 / VXUS 600 / QQQM 300`
 - `6000 RMB` 示例：`VOO 4200 / VXUS 1200 / QQQM 600`
+- 默认策略模式：`manual_total_per_asset_signal`
 - 储备金上限：`base_monthly_rmb * reserve_cap_multiple`
 - 市场数据源：Yahoo Finance via `yfinance`
 - 校验策略：fail fast
@@ -63,8 +65,8 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 
 1. 拉取 `VOO`、`VXUS`、`QQQM` 的历史行情
 2. 校验数据非空、非过旧、长度足够
-3. 计算指标并应用现有 QQQM 信号规则
-4. 生成 RMB 口径的月度建议
+3. 对 `VOO`、`VXUS`、`QQQM` 分别计算独立信号
+4. 生成每个资产的高配/低配建议，并在固定总投入下做零和调整
 5. 按需追加美元估算与 IBKR 执行建议
 6. 渲染 Markdown 报告
 7. 按需发送飞书摘要
@@ -91,10 +93,10 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 
 报告主要回答四个问题：
 
-- 当前是什么状态
-- 本月总投入多少
-- `VOO`、`VXUS`、`QQQM` 分别投多少
-- 为什么会得到这个结果
+- 本月总投入是多少
+- 三个资产的基线分配是多少
+- 哪个资产建议适度高配，哪个资产建议适度低配
+- 每个资产的调整百分比、RMB 变化和 USD 变化是多少
 
 报告中还会包含：
 
@@ -135,6 +137,7 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 关键配置项：
 
 - `base_monthly_rmb`
+- `strategy_mode`
 - `reserve_cap_multiple`
 - `core_ticker`
 - `secondary_ticker`

@@ -81,23 +81,29 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         rsi14=68.0,
         price_percentile_3y=95.0,
     )
-    decision = evaluate_strategy(config, core, growth, ReserveState(reserve_cash_rmb=200))
+    decision = evaluate_strategy(
+        config,
+        core,
+        growth,
+        ReserveState(reserve_cash_rmb=200),
+        secondary_indicators=secondary,
+    )
     review = HistoricalSignalReview(
         months=1,
         note="仅用于信号观察的历史回顾，最近 1 个按月收盘快照。",
         rows=[
             HistoricalSignalReviewRow(
                 month="2026-03",
-                status="HEAT",
+                status="TACTICAL_REBALANCE",
                 base_monthly_rmb=3000,
-                suggested_total_rmb=2500,
-                core_rmb=1750,
-                secondary_rmb=500,
-                qqqm_rmb=250,
-                reserve_cash_delta_rmb=500,
-                reserve_cash_balance_rmb=500,
-                key_trigger_summary="HEAT",
-                short_reason="QQQM 接近 52 周高点，位于 200 日均线上方，且 RSI 偏高。",
+                suggested_total_rmb=3000,
+                core_rmb=2160,
+                secondary_rmb=660,
+                qqqm_rmb=180,
+                reserve_cash_delta_rmb=0,
+                reserve_cash_balance_rmb=0,
+                key_trigger_summary="VOO:OVERWEIGHT | VXUS:OVERWEIGHT | QQQM:STRONG_UNDERWEIGHT",
+                short_reason="当前总投入由手动设定，以下加减仓建议仅用于调整资产间分配，不改变本月总投入。",
                 latest_market_date=pd.Timestamp("2026-03-27").date(),
             )
         ],
@@ -161,16 +167,17 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     assert "## 信号触发详情" in markdown
     assert "## IBKR 执行建议" in markdown
     assert "## 美元估算" in markdown
-    assert "### 规则评估" in markdown
-    assert "过热" in markdown
+    assert "## 单资产战术建议" in markdown
+    assert "适度高配" in markdown
+    assert "明显低配" in markdown
     assert "是" in markdown
     assert "否" in markdown
     assert "final_decision_path" not in markdown
-    assert "决策路径" in markdown
     assert "## 历史信号回顾（最近 1 个月）" in markdown
     assert "仅用于信号观察的历史回顾" in markdown
     assert "2026-03" in markdown
-    assert "储备金变动" in markdown
+    assert "RMB 变化" in markdown
+    assert "USD 变化" in markdown
     assert "VOO" in markdown
     assert "VXUS" in markdown
     assert f"{decision.recommendation_total_rmb} RMB（约 USD {fx_summary.total_usd:.2f}）" in markdown

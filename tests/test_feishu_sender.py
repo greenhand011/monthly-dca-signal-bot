@@ -9,7 +9,7 @@ import requests
 from dca_signal_bot.execution_guidance import ExecutionGuidance
 from dca_signal_bot.feishu_sender import FeishuError, build_summary_text, maybe_send_feishu, send_feishu_text
 from dca_signal_bot.fx_converter import FxConversionSummary
-from dca_signal_bot.strategy_engine import AllocationBreakdown, StrategyDecision
+from dca_signal_bot.strategy_engine import AllocationBreakdown, AssetSignalEvaluation, StrategyDecision
 
 
 class _DummyResponse:
@@ -89,10 +89,18 @@ def test_sender_prefixes_keyword_when_configured(monkeypatch):
 
 def test_summary_text_includes_execution_guidance_and_usd_estimates():
     decision = StrategyDecision(
-        state_label="NORMAL",
-        action_label="原样投",
+        state_label="TACTICAL_REBALANCE",
+        action_label="固定总额，调整分配",
         recommendation_total_rmb=3000,
         allocation=AllocationBreakdown(
+            core_rmb=2160,
+            secondary_rmb=660,
+            growth_rmb=180,
+            core_weight=0.72,
+            secondary_weight=0.22,
+            growth_weight=0.06,
+        ),
+        baseline_allocation=AllocationBreakdown(
             core_rmb=2100,
             secondary_rmb=600,
             growth_rmb=300,
@@ -102,7 +110,41 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         ),
         reserve_delta_rmb=0,
         reserve_cash_after_rmb=0,
+        strategy_mode="manual_total_per_asset_signal",
         reasons=["按基线配比执行。"],
+        asset_signals=[
+            AssetSignalEvaluation(
+                ticker="VOO",
+                score=1,
+                classification="OVERWEIGHT",
+                raw_adjustment_pct=2.0,
+                normalized_adjustment_pct=2.0,
+                delta_rmb=60,
+                final_rmb=2160,
+                summary="VOO 至少满足 2 项加仓条件，可考虑适当高配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="VXUS",
+                score=1,
+                classification="OVERWEIGHT",
+                raw_adjustment_pct=2.0,
+                normalized_adjustment_pct=2.0,
+                delta_rmb=60,
+                final_rmb=660,
+                summary="VXUS 至少满足 2 项加仓条件，可考虑适当高配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="QQQM",
+                score=-2,
+                classification="STRONG_UNDERWEIGHT",
+                raw_adjustment_pct=-4.0,
+                normalized_adjustment_pct=-4.0,
+                delta_rmb=-120,
+                final_rmb=180,
+                summary="QQQM 至少满足 2 项强减仓条件，可考虑明显低配。",
+            ),
+        ],
+        total_is_fixed=True,
     )
     guidance = ExecutionGuidance(
         generated_at_utc=datetime(2026, 3, 30, 6, 55, 40, tzinfo=timezone.utc),
@@ -129,13 +171,13 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         validation_status="PASS",
         rate_cny_per_usd=7.2,
         total_rmb=3000,
-        core_rmb=2100,
-        growth_rmb=300,
+        core_rmb=2160,
+        growth_rmb=180,
         total_usd=416.67,
-        core_usd=291.67,
-        growth_usd=41.67,
-        extra_rmb={"VXUS": 600},
-        extra_usd={"VXUS": 83.33},
+        core_usd=300.00,
+        growth_usd=25.00,
+        extra_rmb={"VXUS": 660},
+        extra_usd={"VXUS": 91.67},
         note="汇率换算完成。",
     )
 
@@ -157,7 +199,8 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
 
     assert "IBKR 执行建议：" in summary
     assert "美元估算：" in summary
-    assert "总投入：3000 RMB（约 USD 416.67）" in summary
-    assert "VOO：2100 RMB（约 USD 291.67）" in summary
-    assert "VXUS：600 RMB（约 USD 83.33）" in summary
-    assert "QQQM：300 RMB（约 USD 41.67）" in summary
+    assert "当前总投入由手动设定" in summary
+    assert "VOO：适度高配" in summary
+    assert "VXUS：适度高配" in summary
+    assert "QQQM：明显低配" in summary
+    assert "VOO：基线约 USD" in summary

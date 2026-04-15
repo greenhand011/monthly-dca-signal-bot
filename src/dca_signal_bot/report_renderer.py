@@ -5,11 +5,11 @@ from pathlib import Path
 
 from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
-from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
+from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_usd_estimate
 from .historical_review import HistoricalSignalReview
 from .indicators import TickerIndicators
 from .presentation import (
-    condition_label,
+    asset_signal_label,
     decision_path_label,
     mode_label,
     order_type_label,
@@ -21,7 +21,7 @@ from .presentation import (
     validation_label,
     yes_no,
 )
-from .strategy_engine import RuleEvaluation, StrategyDecision
+from .strategy_engine import AssetSignalEvaluation, RuleEvaluation, StrategyDecision
 
 
 def _utc_iso(dt: datetime) -> str:
@@ -34,10 +34,36 @@ def _format_local_dt(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M %Z")
 
 
-def _render_condition_lines(rule: RuleEvaluation) -> str:
+def _format_delta_rmb(value: int) -> str:
+    return f"{value:+d} RMB"
+
+
+def _format_delta_usd(value: int, fx_summary: FxConversionSummary | None) -> str:
+    if fx_summary is None or fx_summary.rate_cny_per_usd is None:
+        return "美元估算不可用"
+    usd = convert_rmb_to_usd(abs(value), fx_summary.rate_cny_per_usd)
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}USD {usd:.2f}"
+
+
+def _base_amount_for_signal(config: StrategyConfig, decision: StrategyDecision, signal: AssetSignalEvaluation) -> int:
+    if signal.ticker == config.core_ticker:
+        return decision.baseline_allocation.core_rmb
+    if signal.ticker == config.secondary_ticker:
+        return decision.baseline_allocation.secondary_rmb
+    return decision.baseline_allocation.growth_rmb
+
+
+def _format_asset_signal_conditions(signal: AssetSignalEvaluation) -> str:
     return "<br>".join(
-        f"{condition_label(condition.label)}：{yes_no(condition.passed)}"
-        f"（{condition.observed}，阈值 {condition.threshold}）"
+        f"{condition.label}：{yes_no(condition.passed)}（{condition.observed}，阈值 {condition.threshold}）"
+        for condition in signal.conditions
+    )
+
+
+def _render_legacy_condition_lines(rule: RuleEvaluation) -> str:
+    return "<br>".join(
+        f"{condition.label}：{yes_no(condition.passed)}（{condition.observed}，阈值 {condition.threshold}）"
         for condition in rule.conditions
     )
 
@@ -45,26 +71,38 @@ def _render_condition_lines(rule: RuleEvaluation) -> str:
 def _render_historical_review_table(
     review: HistoricalSignalReview,
     *,
-    core_label: str,
-    growth_label: str,
-    secondary_label: str | None,
+    config: StrategyConfig,
+    strategy_mode: str,
 ) -> str:
     if not review.rows:
         return "_暂无可显示的历史回顾记录。_\n"
 
-    if secondary_label:
+    if strategy_mode == "manual_total_per_asset_signal":
         lines = [
-            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {core_label} | {secondary_label} | {growth_label} | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
+            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {config.core_ticker} | {config.secondary_ticker} | {config.growth_ticker} | 触发摘要 | 原因 |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        ]
+        for row in review.rows:
+            lines.append(
+                "| "
+                f"{row.month} | {state_label(row.status)} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
+                f"{row.core_rmb} | {row.secondary_rmb} | {row.qqqm_rmb} | {decision_path_label(row.key_trigger_summary)} | "
+                f"{row.short_reason} |"
+            )
+        return "\n".join(lines) + "\n"
+
+    if config.secondary_ticker:
+        lines = [
+            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {config.core_ticker} | {config.secondary_ticker} | {config.growth_ticker} | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         ]
     else:
         lines = [
-            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {core_label} | {growth_label} | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
+            f"| 月份 | 状态 | 基线金额 | 建议总投入 | {config.core_ticker} | {config.growth_ticker} | 储备金变动 | 储备金余额 | 触发项 | 原因 |",
             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
         ]
-
     for row in review.rows:
-        if secondary_label:
+        if config.secondary_ticker:
             lines.append(
                 "| "
                 f"{row.month} | {state_label(row.status)} | {row.base_monthly_rmb} | {row.suggested_total_rmb} | "
@@ -103,8 +141,8 @@ def _render_execution_guidance(guidance: ExecutionGuidance) -> str:
 def _render_fx_section(
     fx_summary: FxConversionSummary,
     *,
-    core_label: str,
-    growth_label: str,
+    config: StrategyConfig,
+    decision: StrategyDecision,
 ) -> str:
     lines = [
         "## 美元估算",
@@ -114,22 +152,122 @@ def _render_fx_section(
         f"- 汇率抓取时间（UTC）：{_utc_iso(fx_summary.fetched_at_utc)}",
         f"- 汇率校验状态：{validation_label(fx_summary.validation_status)} (`{fx_summary.validation_status}`)",
     ]
-
     if fx_summary.rate_cny_per_usd is None:
         lines.append("- 美元估算不可用（汇率抓取或校验失败）。")
         return "\n".join(lines) + "\n"
 
-    lines.extend(
-        [
-            f"- 使用汇率：`1 USD = {fx_summary.rate_cny_per_usd:.4f} CNY`",
-            f"- 总投入：`{format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}`",
-            f"- {core_label}：`{format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}`",
-        ]
+    lines.append(f"- 使用汇率：`1 USD = {fx_summary.rate_cny_per_usd:.4f} CNY`")
+    lines.append(f"- 总投入：`{format_rmb_usd_estimate(decision.recommendation_total_rmb, fx_summary.total_usd)}`")
+
+    if decision.strategy_mode == "manual_total_per_asset_signal":
+        for signal in decision.asset_signals:
+            base_rmb = _base_amount_for_signal(config, decision, signal)
+            base_usd = convert_rmb_to_usd(base_rmb, fx_summary.rate_cny_per_usd)
+            final_usd = convert_rmb_to_usd(signal.final_rmb, fx_summary.rate_cny_per_usd)
+            delta_usd = _format_delta_usd(signal.delta_rmb, fx_summary)
+            lines.extend(
+                [
+                    f"- {signal.ticker} 基线：`{base_rmb} RMB（约 USD {base_usd:.2f}）`",
+                    f"- {signal.ticker} 调整：`{signal.normalized_adjustment_pct:+.2f}% / {_format_delta_rmb(signal.delta_rmb)} / {delta_usd}`",
+                    f"- {signal.ticker} 最终建议：`{signal.final_rmb} RMB（约 USD {final_usd:.2f}）`",
+                ]
+            )
+    else:
+        lines.extend(
+            [
+                f"- {config.core_ticker}：`{format_rmb_usd_estimate(decision.allocation.core_rmb, fx_summary.core_usd)}`",
+                f"- {config.secondary_ticker}：`{format_rmb_usd_estimate(decision.allocation.secondary_rmb, fx_summary.extra_usd.get(config.secondary_ticker))}`"
+                if config.secondary_ticker
+                else "",
+                f"- {config.growth_ticker}：`{format_rmb_usd_estimate(decision.allocation.growth_rmb, fx_summary.growth_usd)}`",
+            ]
+        )
+    return "\n".join(line for line in lines if line) + "\n"
+
+
+def _render_asset_snapshot(
+    config: StrategyConfig,
+    core: TickerIndicators,
+    secondary: TickerIndicators | None,
+    growth: TickerIndicators,
+) -> str:
+    rows = [
+        "| 标的 | 当前价格 | 52 周高点 | 回撤 | 200 日均线 | 200 日均线偏离 | RSI(14) | 3 年分位 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        f"| {config.core_ticker} | {core.current_price:.2f} | {core.high_52w:.2f} | {core.drawdown_52w * 100:.2f}% | {core.sma200:.2f} | {core.deviation_from_sma200 * 100:.2f}% | {core.rsi14:.2f} | {core.price_percentile_3y:.2f}% |",
+    ]
+    if secondary is not None and config.secondary_ticker:
+        rows.append(
+            f"| {config.secondary_ticker} | {secondary.current_price:.2f} | {secondary.high_52w:.2f} | "
+            f"{secondary.drawdown_52w * 100:.2f}% | {secondary.sma200:.2f} | "
+            f"{secondary.deviation_from_sma200 * 100:.2f}% | {secondary.rsi14:.2f} | {secondary.price_percentile_3y:.2f}% |"
+        )
+    rows.append(
+        f"| {config.growth_ticker} | {growth.current_price:.2f} | {growth.high_52w:.2f} | "
+        f"{growth.drawdown_52w * 100:.2f}% | {growth.sma200:.2f} | "
+        f"{growth.deviation_from_sma200 * 100:.2f}% | {growth.rsi14:.2f} | {growth.price_percentile_3y:.2f}% |"
     )
-    for ticker, amount in fx_summary.extra_rmb.items():
-        lines.append(f"- {ticker}：`{format_rmb_usd_estimate(amount, fx_summary.extra_usd.get(ticker))}`")
-    lines.append(f"- {growth_label}：`{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}`")
+    return "\n".join(rows)
+
+
+def _render_manual_total_section(
+    *,
+    config: StrategyConfig,
+    decision: StrategyDecision,
+    fx_summary: FxConversionSummary | None,
+) -> str:
+    lines = [
+        "## 单资产战术建议",
+        "",
+        "- 当前总投入由手动设定。",
+        "- 以下加仓/减仓建议仅用于调整资产间分配，不改变本月总投入。",
+        "",
+        "| 资产 | 基线权重 | 基线金额 | 信号分类 | 调整建议 | RMB 变化 | USD 变化 | 最终建议金额 |",
+        "| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
+    ]
+    for signal in decision.asset_signals:
+        base_rmb = _base_amount_for_signal(config, decision, signal)
+        usd_delta = _format_delta_usd(signal.delta_rmb, fx_summary)
+        lines.append(
+            f"| {signal.ticker} | {(_base_amount_for_signal(config, decision, signal) / decision.recommendation_total_rmb) * 100:.2f}% | "
+            f"{base_rmb} | {asset_signal_label(signal.classification)} | "
+            f"{signal.normalized_adjustment_pct:+.2f}% | {signal.delta_rmb:+d} | {usd_delta} | {signal.final_rmb} |"
+        )
     return "\n".join(lines) + "\n"
+
+
+def _render_manual_signal_details(decision: StrategyDecision) -> str:
+    lines = [
+        "## 信号触发详情",
+        "",
+        "| 资产 | 评分 | 分类 | 条件检查 | 说明 |",
+        "| --- | ---: | --- | --- | --- |",
+    ]
+    for signal in decision.asset_signals:
+        lines.append(
+            f"| {signal.ticker} | {signal.score:+d} | {asset_signal_label(signal.classification)} | "
+            f"{_format_asset_signal_conditions(signal)} | {signal.summary} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _render_legacy_signal_details(decision: StrategyDecision) -> str:
+    trigger_rows = "\n".join(
+        f"| {rule_label(rule.rule_name)} | {yes_no(rule.triggered)} | {_render_legacy_condition_lines(rule)} | {rule.summary} |"
+        for rule in decision.rule_evaluations
+    )
+    return (
+        "## 信号触发详情\n\n"
+        "### 规则评估\n\n"
+        "| 规则 | 是否触发 | 条件检查 | 说明 |\n"
+        "| --- | --- | --- | --- |\n"
+        f"{trigger_rows}\n\n"
+        "### 决策路径\n\n"
+        f"- 触发规则：`{decision.triggered_rule}`\n"
+        f"- 决策路径：`{decision_path_label(decision.decision_path)}`\n"
+        f"- 已触发规则：`{', '.join(rule_label(rule.rule_name) for rule in decision.rule_evaluations if rule.triggered) or '无'}`\n"
+        f"- 未触发规则：`{', '.join(rule_label(rule.rule_name) for rule in decision.rule_evaluations if not rule.triggered) or '无'}`\n"
+    )
 
 
 def render_report(
@@ -152,19 +290,6 @@ def render_report(
     execution_guidance: ExecutionGuidance | None = None,
     fx_summary: FxConversionSummary | None = None,
 ) -> str:
-    reasons = "\n".join(f"- {reason}" for reason in decision.reasons)
-    run_mode_line = f"`{mode_label(run_mode_label)}`"
-    status_line = f"`{state_label(decision.state_label)}` (`{decision.state_label}`)"
-    trigger_rows = "\n".join(
-        f"| {rule_label(rule.rule_name)} | {yes_no(rule.triggered)} | {_render_condition_lines(rule)} | {rule.summary} |"
-        for rule in decision.rule_evaluations
-    )
-    trigger_table = (
-        "| 规则 | 是否触发 | 条件检查 | 说明 |\n"
-        "| --- | --- | --- | --- |\n"
-        f"{trigger_rows}\n"
-    )
-
     data_lines = [
         "## 数据信息",
         "",
@@ -182,146 +307,89 @@ def render_report(
         ]
     )
 
-    execution_section = ""
-    if execution_guidance is not None:
-        execution_section = _render_execution_guidance(execution_guidance) + "\n"
-
-    fx_section = ""
-    if fx_summary is not None:
-        fx_section = _render_fx_section(
-            fx_summary,
-            core_label=config.core_ticker,
-            growth_label=config.growth_ticker,
-        ) + "\n"
-
-    market_lines = [
-        "## 市场数据",
-        "",
-        f"- {config.core_ticker} 当前价格：`{core.current_price:.2f}`",
-    ]
-    if secondary is not None and config.secondary_ticker:
-        market_lines.append(f"- {config.secondary_ticker} 当前价格：`{secondary.current_price:.2f}`")
-    market_lines.extend(
-        [
-            f"- {config.growth_ticker} 当前价格：`{growth.current_price:.2f}`",
-            f"- {config.growth_ticker} 52 周高点：`{growth.high_52w:.2f}`",
-            f"- {config.growth_ticker} 距 52 周高点回撤：`{growth.drawdown_52w * 100:.2f}%`",
-            f"- {config.growth_ticker} 相对 200 日均线偏离：`{growth.deviation_from_sma200 * 100:.2f}%`",
-            f"- {config.growth_ticker} 200 日均线：`{growth.sma200:.2f}`",
-            f"- {config.growth_ticker} RSI(14)：`{growth.rsi14:.2f}`",
-            f"- {config.core_ticker} 3 年价格分位：`{core.price_percentile_3y:.2f}%`",
-        ]
-    )
-    if secondary is not None and config.secondary_ticker:
-        market_lines.append(f"- {config.secondary_ticker} 3 年价格分位：`{secondary.price_percentile_3y:.2f}%`")
-    market_lines.extend(
-        [
-            f"- {config.growth_ticker} 3 年价格分位：`{growth.price_percentile_3y:.2f}%`",
-            f"- 当前储备金余额：`{reserve_cash_rmb} RMB`",
-            f"- 储备金变动：`{decision.reserve_delta_rmb:+d} RMB`",
-            "",
-        ]
-    )
-
-    snapshot_rows = [
-        "| 标的 | 当前价格 | 52 周高点 | 回撤 | 200 日均线 | 200 日均线偏离 | RSI(14) | 3 年分位 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-        f"| {config.core_ticker} | {core.current_price:.2f} | {core.high_52w:.2f} | {core.drawdown_52w * 100:.2f}% | {core.sma200:.2f} | {core.deviation_from_sma200 * 100:.2f}% | {core.rsi14:.2f} | {core.price_percentile_3y:.2f}% |",
-    ]
-    if secondary is not None and config.secondary_ticker:
-        snapshot_rows.append(
-            f"| {config.secondary_ticker} | {secondary.current_price:.2f} | {secondary.high_52w:.2f} | "
-            f"{secondary.drawdown_52w * 100:.2f}% | {secondary.sma200:.2f} | "
-            f"{secondary.deviation_from_sma200 * 100:.2f}% | {secondary.rsi14:.2f} | {secondary.price_percentile_3y:.2f}% |"
-        )
-    snapshot_rows.append(
-        f"| {config.growth_ticker} | {growth.current_price:.2f} | {growth.high_52w:.2f} | "
-        f"{growth.drawdown_52w * 100:.2f}% | {growth.sma200:.2f} | "
-        f"{growth.deviation_from_sma200 * 100:.2f}% | {growth.rsi14:.2f} | {growth.price_percentile_3y:.2f}% |"
-    )
-
-    recommendation_lines = [
-        "## 本月建议",
-        "",
-        f"- 本月建议总投入金额：`{decision.recommendation_total_rmb} RMB`",
-        f"- {config.core_ticker} 建议投入金额：`{decision.allocation.core_rmb} RMB`",
-    ]
-    if config.secondary_ticker:
-        recommendation_lines.append(f"- {config.secondary_ticker} 建议投入金额：`{decision.allocation.secondary_rmb} RMB`")
-    recommendation_lines.extend(
-        [
-            f"- {config.growth_ticker} 建议投入金额：`{decision.allocation.growth_rmb} RMB`",
-            f"- 本月建议动作：`{decision.action_label}`",
-            f"- 储备金复用触发：`{decision.reserve_delta_rmb:+d} RMB`",
-            "",
-            "### 原因说明",
-            "",
-            reasons,
-            "",
-        ]
-    )
-
+    execution_section = _render_execution_guidance(execution_guidance).rstrip() if execution_guidance is not None else ""
+    fx_section = _render_fx_section(fx_summary, config=config, decision=decision).rstrip() if fx_summary is not None else ""
     historical_section = ""
     if historical_review is not None:
         historical_section = (
             f"## 历史信号回顾（最近 {historical_review.months} 个月）\n\n"
             f"> {historical_review.note}\n\n"
-            f"{_render_historical_review_table(historical_review, core_label=config.core_ticker, growth_label=config.growth_ticker, secondary_label=config.secondary_ticker)}\n"
-        )
+            f"{_render_historical_review_table(historical_review, config=config, strategy_mode=decision.strategy_mode)}"
+        ).rstrip()
+
+    market_section = (
+        "## 市场数据\n\n"
+        f"{_render_asset_snapshot(config, core, secondary, growth)}\n\n"
+        f"- 当前储备金余额：`{reserve_cash_rmb} RMB`\n"
+        f"- 储备金变动：`{decision.reserve_delta_rmb:+d} RMB`\n"
+    )
+
+    if decision.strategy_mode == "manual_total_per_asset_signal":
+        recommendation_section = _render_manual_total_section(config=config, decision=decision, fx_summary=fx_summary).rstrip()
+        trigger_section = _render_manual_signal_details(decision).rstrip()
+    else:
+        recommendation_section = (
+            "## 本月建议\n\n"
+            f"- 本月建议总投入金额：`{decision.recommendation_total_rmb} RMB`\n"
+            f"- {config.core_ticker} 建议投入金额：`{decision.allocation.core_rmb} RMB`\n"
+            + (f"- {config.secondary_ticker} 建议投入金额：`{decision.allocation.secondary_rmb} RMB`\n" if config.secondary_ticker else "")
+            + f"- {config.growth_ticker} 建议投入金额：`{decision.allocation.growth_rmb} RMB`\n"
+            f"- 本月建议动作：`{decision.action_label}`\n"
+            f"- 储备金复用触发：`{decision.reserve_delta_rmb:+d} RMB`\n"
+        ).rstrip()
+        trigger_section = _render_legacy_signal_details(decision).rstrip()
 
     risk_lines = [
         "### 风险提示",
         "",
         "- 本报告仅提供规则化辅助决策，不构成投资建议。",
+        "- 本项目不会自动交易，资产级高配/低配建议仅用于手动执行参考。",
         "- 历史指标不能保证未来收益，ETF 价格、汇率与数据源都可能波动或修正。",
-        "- 储备金机制可以平滑节奏，但不会消除市场风险。",
     ]
     if run_mode_label:
         risk_lines.append("- 模拟模式默认不会修改正式储备金状态。")
     risk_lines.extend(
         [
             "",
+            "### 原因说明",
+            "",
+            *[f"- {reason}" for reason in decision.reasons],
+            "",
             "### 下次查看建议",
             "",
-            "建议在下一个月首个交易日或下一次月度运行时再次查看；如果市场结构发生明显变化，也可以提前复核。",
+            "建议在下一个月首个交易日或下一次月度运行时再次查看；如需手动调整总投入，可直接在 workflow_dispatch 或 CLI 中覆盖月投金额。",
         ]
     )
 
-    return "\n".join(
+    body = [
+        f"# {config.strategy_name} 月度定投报告",
+        "",
+        f"**日期**：{report_date.isoformat()}  ",
+        f"**运行模式**：`{mode_label(run_mode_label)}`  ",
+        f"**当前状态**：`{state_label(decision.state_label)}` (`{decision.state_label}`)  ",
+        f"**策略模式**：`{decision.strategy_mode}`",
+        "",
+        *data_lines,
+    ]
+    if execution_section:
+        body.extend([execution_section, ""])
+    if fx_section:
+        body.extend([fx_section, ""])
+    body.extend(
         [
-            f"# {config.strategy_name} 月度定投报告",
+            market_section.rstrip(),
             "",
-            f"**日期**：{report_date.isoformat()}  ",
-            f"**运行模式**：{run_mode_line}  ",
-            f"**当前市场状态**：{status_line}",
+            recommendation_section,
             "",
-            *data_lines,
-            execution_section.rstrip(),
-            fx_section.rstrip(),
-            *market_lines,
-            "## 信号触发详情",
+            trigger_section,
             "",
-            "### 当前资产快照",
-            "",
-            *snapshot_rows,
-            "",
-            "### 规则评估",
-            "",
-            trigger_table.rstrip(),
-            "",
-            "### 决策路径",
-            "",
-            f"- 触发规则：`{decision.triggered_rule}`",
-            f"- 决策路径：`{decision_path_label(decision.decision_path)}`",
-            f"- 已触发规则：`{', '.join(rule_label(rule.rule_name) for rule in decision.rule_evaluations if rule.triggered) or '无'}`",
-            f"- 未触发规则：`{', '.join(rule_label(rule.rule_name) for rule in decision.rule_evaluations if not rule.triggered) or '无'}`",
-            "",
-            *recommendation_lines,
             *risk_lines,
             "",
-            historical_section.rstrip(),
         ]
-    ).strip() + "\n"
+    )
+    if historical_section:
+        body.extend([historical_section, ""])
+    return "\n".join(body).strip() + "\n"
 
 
 def report_path_for(report_dir: str | Path, report_date: date) -> Path:

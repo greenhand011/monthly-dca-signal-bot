@@ -7,9 +7,10 @@ from pathlib import Path
 
 from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
-from .fx_converter import FxConversionSummary, format_rmb_usd_estimate
+from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_usd_estimate
 from .indicators import TickerIndicators
 from .presentation import (
+    asset_signal_label,
     mode_label,
     order_type_label,
     outside_rth_label,
@@ -51,6 +52,22 @@ def _format_local_dt(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M %Z")
 
 
+def _base_amount_for_signal(config: StrategyConfig, decision: StrategyDecision, ticker: str) -> int:
+    if ticker == config.core_ticker:
+        return decision.baseline_allocation.core_rmb
+    if ticker == config.secondary_ticker:
+        return decision.baseline_allocation.secondary_rmb
+    return decision.baseline_allocation.growth_rmb
+
+
+def _format_delta_usd(value: int, fx_summary: FxConversionSummary | None) -> str:
+    if fx_summary is None or fx_summary.rate_cny_per_usd is None:
+        return "USD 不可用"
+    usd = convert_rmb_to_usd(abs(value), fx_summary.rate_cny_per_usd)
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}USD {usd:.2f}"
+
+
 def build_summary_text(
     *,
     config: StrategyConfig,
@@ -73,19 +90,37 @@ def build_summary_text(
         f"运行模式：{mode_label(run_mode_label)}",
         f"状态：{state_label(decision.state_label)}",
         f"总投入：{decision.recommendation_total_rmb} RMB",
-        f"{config.core_ticker}：{decision.allocation.core_rmb} RMB",
     ]
-    if config.secondary_ticker:
-        lines.append(f"{config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
-    lines.extend(
-        [
-            f"{config.growth_ticker}：{decision.allocation.growth_rmb} RMB",
-            f"储备金变动：{decision.reserve_delta_rmb:+d} RMB",
-            f"储备金余额：{decision.reserve_cash_after_rmb} RMB",
-            "",
-            f"数据源：{data_source}",
-        ]
-    )
+
+    if decision.strategy_mode == "manual_total_per_asset_signal":
+        lines.extend(
+            [
+                "当前总投入由手动设定，以下建议仅调整资产间分配，不改变本月总投入。",
+                f"基线分配：{config.core_ticker} {decision.baseline_allocation.core_rmb} / "
+                f"{config.secondary_ticker} {decision.baseline_allocation.secondary_rmb} / "
+                f"{config.growth_ticker} {decision.baseline_allocation.growth_rmb} RMB",
+            ]
+        )
+        for signal in decision.asset_signals:
+            base_rmb = _base_amount_for_signal(config, decision, signal.ticker)
+            lines.append(
+                f"{signal.ticker}：{asset_signal_label(signal.classification)}，"
+                f"基线 {base_rmb} RMB，调整 {signal.normalized_adjustment_pct:+.2f}% "
+                f"({signal.delta_rmb:+d} RMB / {_format_delta_usd(signal.delta_rmb, fx_summary)})，"
+                f"最终 {signal.final_rmb} RMB"
+            )
+    else:
+        lines.extend(
+            [
+                f"{config.core_ticker}：{decision.allocation.core_rmb} RMB",
+                f"{config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB" if config.secondary_ticker else "",
+                f"{config.growth_ticker}：{decision.allocation.growth_rmb} RMB",
+                f"储备金变动：{decision.reserve_delta_rmb:+d} RMB",
+                f"储备金余额：{decision.reserve_cash_after_rmb} RMB",
+            ]
+        )
+
+    lines.extend(["", f"数据源：{data_source}"])
 
     latest_parts = [f"{config.core_ticker} {latest_market_date_core.isoformat()}"]
     if config.secondary_ticker and latest_market_date_secondary is not None:
@@ -122,15 +157,32 @@ def build_summary_text(
             [
                 "",
                 "美元估算：",
-                f"- 总投入：{format_rmb_usd_estimate(fx_summary.total_rmb, fx_summary.total_usd)}",
-                f"- {config.core_ticker}：{format_rmb_usd_estimate(fx_summary.core_rmb, fx_summary.core_usd)}",
+                f"- 总投入：{format_rmb_usd_estimate(decision.recommendation_total_rmb, fx_summary.total_usd)}",
             ]
         )
-        for ticker, amount in fx_summary.extra_rmb.items():
-            lines.append(f"- {ticker}：{format_rmb_usd_estimate(amount, fx_summary.extra_usd.get(ticker))}")
+        if decision.strategy_mode == "manual_total_per_asset_signal":
+            for signal in decision.asset_signals:
+                base_rmb = _base_amount_for_signal(config, decision, signal.ticker)
+                if fx_summary.rate_cny_per_usd is None:
+                    lines.append(f"- {signal.ticker}：基线 {base_rmb} RMB，调整 {_format_delta_usd(signal.delta_rmb, fx_summary)}，最终 USD 不可用")
+                else:
+                    base_usd = convert_rmb_to_usd(base_rmb, fx_summary.rate_cny_per_usd)
+                    final_usd = convert_rmb_to_usd(signal.final_rmb, fx_summary.rate_cny_per_usd)
+                    lines.append(
+                        f"- {signal.ticker}：基线约 USD {base_usd:.2f} / 调整 {_format_delta_usd(signal.delta_rmb, fx_summary)} / 最终约 USD {final_usd:.2f}"
+                    )
+        else:
+            lines.extend(
+                [
+                    f"- {config.core_ticker}：{format_rmb_usd_estimate(decision.allocation.core_rmb, fx_summary.core_usd)}",
+                    f"- {config.secondary_ticker}：{format_rmb_usd_estimate(decision.allocation.secondary_rmb, fx_summary.extra_usd.get(config.secondary_ticker))}"
+                    if config.secondary_ticker
+                    else "",
+                    f"- {config.growth_ticker}：{format_rmb_usd_estimate(decision.allocation.growth_rmb, fx_summary.growth_usd)}",
+                ]
+            )
         lines.extend(
             [
-                f"- {config.growth_ticker}：{format_rmb_usd_estimate(fx_summary.growth_rmb, fx_summary.growth_usd)}",
                 f"- 汇率来源：{fx_summary.source}",
                 f"- 汇率校验状态：{validation_label(fx_summary.validation_status)}",
             ]
@@ -140,7 +192,7 @@ def build_summary_text(
         else:
             lines.append("- 美元估算不可用（汇率数据问题）")
 
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line != "")
 
 
 def build_failure_alert_text(

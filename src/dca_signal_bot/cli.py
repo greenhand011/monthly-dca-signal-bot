@@ -134,6 +134,7 @@ def _run(
             core_indicators=core_indicators,
             growth_indicators=growth_indicators,
             reserve_state=reserve_state,
+            secondary_indicators=secondary_indicators,
         )
 
         execution_guidance = None
@@ -161,6 +162,7 @@ def _run(
         historical_review = build_historical_signal_review(
             config=effective_config,
             core_history=core_history.history,
+            secondary_history=secondary_history.history if secondary_history is not None else None,
             growth_history=growth_history.history,
             months=review_months,
         )
@@ -228,10 +230,18 @@ def _run(
         print(f"校验状态：{validation_label(bundle.validation_status)}")
         print(f"数据来源：{bundle.data_source}")
         print(f"总投入建议：{decision.recommendation_total_rmb} RMB")
-        print(f"{effective_config.core_ticker}：{decision.allocation.core_rmb} RMB")
-        if effective_config.secondary_ticker:
-            print(f"{effective_config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
-        print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
+        if decision.strategy_mode == "manual_total_per_asset_signal":
+            print("当前总投入由手动设定，以下建议仅调整资产间分配，不改变总投入。")
+            for signal in decision.asset_signals:
+                print(
+                    f"{signal.ticker}：基线 {next((base for ticker, base in [(effective_config.core_ticker, decision.baseline_allocation.core_rmb), (effective_config.secondary_ticker, decision.baseline_allocation.secondary_rmb), (effective_config.growth_ticker, decision.baseline_allocation.growth_rmb)] if ticker == signal.ticker), 0)} RMB，"
+                    f"建议 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB），最终 {signal.final_rmb} RMB"
+                )
+        else:
+            print(f"{effective_config.core_ticker}：{decision.allocation.core_rmb} RMB")
+            if effective_config.secondary_ticker:
+                print(f"{effective_config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
+            print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
         print(f"储备金余额：{decision.reserve_cash_after_rmb} RMB")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(

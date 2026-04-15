@@ -52,6 +52,7 @@ def build_historical_signal_review(
     *,
     config: StrategyConfig,
     core_history: pd.DataFrame,
+    secondary_history: pd.DataFrame | None,
     growth_history: pd.DataFrame,
     months: int = 12,
 ) -> HistoricalSignalReview:
@@ -62,17 +63,26 @@ def build_historical_signal_review(
 
     for cutoff in cutoff_dates:
         core_slice = core_history.loc[:cutoff]
+        secondary_slice = secondary_history.loc[:cutoff] if secondary_history is not None else None
         growth_slice = growth_history.loc[:cutoff]
         if core_slice.empty or growth_slice.empty:
             continue
+        if config.secondary_ticker and secondary_slice is not None and secondary_slice.empty:
+            continue
 
         core_indicators = compute_ticker_indicators(core_slice, config.core_ticker)
+        secondary_indicators = (
+            compute_ticker_indicators(secondary_slice, config.secondary_ticker)
+            if config.secondary_ticker and secondary_slice is not None
+            else None
+        )
         growth_indicators = compute_ticker_indicators(growth_slice, config.growth_ticker)
         decision = evaluate_strategy(
             config=config,
             core_indicators=core_indicators,
             growth_indicators=growth_indicators,
             reserve_state=simulated_state,
+            secondary_indicators=secondary_indicators,
         )
         simulated_state = ReserveState(reserve_cash_rmb=decision.reserve_cash_after_rmb)
 
@@ -87,14 +97,20 @@ def build_historical_signal_review(
                 qqqm_rmb=decision.allocation.growth_rmb,
                 reserve_cash_delta_rmb=decision.reserve_delta_rmb,
                 reserve_cash_balance_rmb=decision.reserve_cash_after_rmb,
-                key_trigger_summary=decision.triggered_rule,
+                key_trigger_summary=decision.decision_path if decision.strategy_mode == "manual_total_per_asset_signal" else decision.triggered_rule,
                 short_reason=decision.reasons[-1],
                 latest_market_date=pd.to_datetime(cutoff).date(),
             )
         )
 
-    note = (
-        f"仅用于信号观察的历史回顾，覆盖最近 {len(rows)} 个按月收盘快照；"
-        "储备金余额从回顾窗口起点 0 RMB 做确定性重建，不能当作真实历史生产状态。"
-    )
+    if config.strategy_mode == "manual_total_per_asset_signal":
+        note = (
+            f"仅用于信号观察的历史回顾，覆盖最近 {len(rows)} 个按月收盘快照；"
+            "该模式保持总投入固定，回顾中展示的是资产间相对调整建议，不代表真实历史执行结果。"
+        )
+    else:
+        note = (
+            f"仅用于信号观察的历史回顾，覆盖最近 {len(rows)} 个按月收盘快照；"
+            "储备金余额从回顾窗口起点 0 RMB 做确定性重建，不能当作真实历史生产状态。"
+        )
     return HistoricalSignalReview(months=len(rows), note=note, rows=rows)

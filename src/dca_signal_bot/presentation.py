@@ -7,6 +7,8 @@ STATE_LABELS = {
     "PULLBACK": "回撤加投",
     "DEEP_PULLBACK": "深度回撤",
     "CAPITULATION_RECOVERY": "止跌回升",
+    "TACTICAL_REBALANCE": "资产级调整",
+    "BASELINE_ONLY": "维持基线",
 }
 
 VALIDATION_LABELS = {
@@ -50,6 +52,7 @@ RULE_LABELS = {
     "DEEP_PULLBACK": "深度回撤",
     "PULLBACK": "回撤",
     "NORMAL": "正常执行",
+    "PER_ASSET_TACTICAL": "单资产战术建议",
 }
 
 CONDITION_LABELS = {
@@ -69,6 +72,14 @@ RULE_SUMMARY_LABELS = {
 
 RUN_MODE_LABELS = {
     "Production Mode": "正式模式",
+}
+
+ASSET_SIGNAL_LABELS = {
+    "STRONG_OVERWEIGHT": "明显高配",
+    "OVERWEIGHT": "适度高配",
+    "NEUTRAL": "维持基线",
+    "UNDERWEIGHT": "适度低配",
+    "STRONG_UNDERWEIGHT": "明显低配",
 }
 
 
@@ -128,6 +139,13 @@ def decision_path_label(text: str) -> str:
         ("DEEP_PULLBACK", "深度回撤"),
         ("PULLBACK", "回撤"),
         ("NORMAL", "正常执行"),
+        ("TACTICAL_REBALANCE", "资产级调整"),
+        ("BASELINE_ONLY", "维持基线"),
+        ("STRONG_OVERWEIGHT", "明显高配"),
+        ("OVERWEIGHT", "适度高配"),
+        ("NEUTRAL", "维持基线"),
+        ("UNDERWEIGHT", "适度低配"),
+        ("STRONG_UNDERWEIGHT", "明显低配"),
         ("YES", "是"),
         ("NO", "否"),
     ]
@@ -135,3 +153,7 @@ def decision_path_label(text: str) -> str:
     for source, target in replacements:
         result = result.replace(source, target)
     return result
+
+
+def asset_signal_label(label: str) -> str:
+    return ASSET_SIGNAL_LABELS.get(label, label)

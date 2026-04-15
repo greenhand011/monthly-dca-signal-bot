@@ -55,6 +55,7 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
 @dataclass(frozen=True)
 class StrategyConfig:
     strategy_name: str = "monthly-dca-signal-bot"
+    strategy_mode: str = "manual_total_per_asset_signal"
     base_monthly_rmb: int = 3000
     reserve_cap_multiple: float = 2.0
     core_ticker: str = "VOO"
@@ -80,6 +81,15 @@ class StrategyConfig:
         return int(round(self.base_monthly_rmb * self.reserve_cap_multiple))
 
 
+def _validate_strategy_mode(strategy_mode: str) -> None:
+    allowed_modes = {
+        "manual_total_per_asset_signal",
+        "legacy_master_signal_total_amount",
+    }
+    if strategy_mode not in allowed_modes:
+        raise ValueError(f"Unsupported strategy_mode: {strategy_mode}")
+
+
 def apply_base_override(config: StrategyConfig, base_monthly_rmb: int | None) -> StrategyConfig:
     if base_monthly_rmb is None:
         return config
@@ -92,6 +102,7 @@ def apply_base_override(config: StrategyConfig, base_monthly_rmb: int | None) ->
         secondary_override = None
     updated = replace(
         config,
+        strategy_mode=str(overrides.get("strategy_mode", config.strategy_mode)),
         base_monthly_rmb=base_monthly_rmb,
         core_ticker=str(overrides.get("core_ticker", config.core_ticker)),
         secondary_ticker=secondary_override,
@@ -215,6 +226,7 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
 
     config = StrategyConfig(
         strategy_name=str(raw.get("strategy_name", "monthly-dca-signal-bot")),
+        strategy_mode=str(raw.get("strategy_mode", "manual_total_per_asset_signal")),
         base_monthly_rmb=int(raw.get("base_monthly_rmb", 3000)),
         reserve_cap_multiple=float(raw.get("reserve_cap_multiple", 2.0)),
         core_ticker=str(raw.get("core_ticker", "VOO")),
@@ -233,8 +245,10 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         thresholds=merged_thresholds,
         base_overrides=normalized_overrides,
     )
+    _validate_strategy_mode(config.strategy_mode)
     _validate_weights(config.core_weight_normal, config.secondary_weight_normal, config.growth_weight_normal)
     for override in base_overrides.values():
+        _validate_strategy_mode(str(override.get("strategy_mode", config.strategy_mode)))
         _validate_weights(
             float(override.get("core_weight_normal", config.core_weight_normal)),
             float(override.get("secondary_weight_normal", config.secondary_weight_normal)),
