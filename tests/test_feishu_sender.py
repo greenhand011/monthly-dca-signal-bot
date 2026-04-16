@@ -200,7 +200,93 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
     assert "IBKR 执行建议：" in summary
     assert "美元估算：" in summary
     assert "当前总投入由手动设定" in summary
-    assert "VOO：适度高配" in summary
-    assert "VXUS：适度高配" in summary
-    assert "QQQM：明显低配" in summary
+    assert "VOO：原始信号偏弱；最终适度高配" in summary
+    assert "VXUS：原始信号偏弱；最终适度高配" in summary
+    assert "QQQM：原始信号明显偏热；最终适度低配" in summary
     assert "VOO：基线约 USD" in summary
+    assert "原因：按基线配比执行。" in summary
+
+
+def test_summary_text_zero_final_delta_is_not_described_as_direct_underweight():
+    decision = StrategyDecision(
+        state_label="BASELINE_ONLY",
+        action_label="固定总额，维持基线",
+        recommendation_total_rmb=3000,
+        allocation=AllocationBreakdown(
+            core_rmb=2100,
+            secondary_rmb=600,
+            growth_rmb=300,
+            core_weight=0.70,
+            secondary_weight=0.20,
+            growth_weight=0.10,
+        ),
+        baseline_allocation=AllocationBreakdown(
+            core_rmb=2100,
+            secondary_rmb=600,
+            growth_rmb=300,
+            core_weight=0.70,
+            secondary_weight=0.20,
+            growth_weight=0.10,
+        ),
+        reserve_delta_rmb=0,
+        reserve_cash_after_rmb=0,
+        strategy_mode="manual_total_per_asset_signal",
+        reasons=[
+            "本月总投入由手动设定为 3000 RMB，不参与自动增减仓。",
+            "系统分别评估了 VOO、VXUS、QQQM 的原始资产信号。",
+            "尽管部分资产原始信号显示偏热或偏弱，但在三资产零和归一化后，本月未形成明确的相对增减配结果，因此最终维持基线分配。",
+        ],
+        asset_signals=[
+            AssetSignalEvaluation(
+                ticker="VOO",
+                score=-2,
+                classification="STRONG_UNDERWEIGHT",
+                raw_adjustment_pct=-4.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=2100,
+                summary="VOO 至少满足 2 项强减仓条件，可考虑明显低配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="VXUS",
+                score=-1,
+                classification="UNDERWEIGHT",
+                raw_adjustment_pct=-2.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=600,
+                summary="VXUS 至少满足 2 项减仓条件，可考虑轻微低配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="QQQM",
+                score=0,
+                classification="NEUTRAL",
+                raw_adjustment_pct=0.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=300,
+                summary="QQQM 当前信号中性，维持基线。",
+            ),
+        ],
+        total_is_fixed=True,
+    )
+
+    summary = build_summary_text(
+        config=SimpleNamespace(core_ticker="VOO", secondary_ticker="VXUS", growth_ticker="QQQM"),
+        growth=object(),
+        decision=decision,
+        report_path="reports/2026-03-report.md",
+        report_date="2026-03-30",
+        data_source="Yahoo Finance via yfinance",
+        latest_market_date_core=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        latest_market_date_secondary=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        latest_market_date_qqqm=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        validation_status="PASS",
+        run_mode_label="正式模式",
+        execution_guidance=None,
+        fx_summary=None,
+    )
+
+    assert "VOO：原始信号明显偏热；最终维持基线（+0 RMB" in summary
+    assert "VXUS：原始信号偏热；最终维持基线（+0 RMB" in summary
+    assert "明显低配（+0 RMB" not in summary

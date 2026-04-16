@@ -12,6 +12,7 @@ from dca_signal_bot.historical_review import HistoricalSignalReview, HistoricalS
 from dca_signal_bot.indicators import TickerIndicators
 from dca_signal_bot.report_renderer import render_report
 from dca_signal_bot.reserve_state import ReserveState
+from dca_signal_bot.strategy_engine import AllocationBreakdown, AssetSignalEvaluation, StrategyDecision
 from dca_signal_bot.strategy_engine import evaluate_strategy
 
 
@@ -164,20 +165,149 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     )
 
     assert "模拟模式：基线月投金额 = 6000" in markdown
-    assert "## 信号触发详情" in markdown
+    assert "## 资产原始信号" in markdown
+    assert "## 归一化后最终建议" in markdown
+    assert "## 条件检查详情" in markdown
     assert "## IBKR 执行建议" in markdown
     assert "## 美元估算" in markdown
-    assert "## 单资产战术建议" in markdown
+    assert "原始信号判断" in markdown
+    assert "原始建议方向" in markdown
+    assert "归一化后建议" in markdown
+    assert "明显偏热" in markdown
+    assert "偏热" in markdown
     assert "适度高配" in markdown
-    assert "明显低配" in markdown
+    assert "适度低配" in markdown
     assert "是" in markdown
     assert "否" in markdown
     assert "final_decision_path" not in markdown
     assert "## 历史信号回顾（最近 1 个月）" in markdown
     assert "仅用于信号观察的历史回顾" in markdown
     assert "2026-03" in markdown
-    assert "RMB 变化" in markdown
-    assert "USD 变化" in markdown
+    assert "调整金额（RMB）" in markdown
+    assert "调整金额（USD）" in markdown
     assert "VOO" in markdown
     assert "VXUS" in markdown
     assert f"{decision.recommendation_total_rmb} RMB（约 USD {fx_summary.total_usd:.2f}）" in markdown
+
+
+def test_render_report_zero_final_delta_uses_maintain_baseline_wording():
+    config = load_strategy_config("config/strategy.yaml")
+    core = _indicator(
+        "VOO",
+        price=500.0,
+        high_52w=505.0,
+        drawdown_52w=0.0099,
+        sma200=470.0,
+        deviation_from_sma200=0.0638,
+        sma20=498.0,
+        deviation_from_sma20=0.0040,
+        rsi14=74.0,
+        price_percentile_3y=92.0,
+    )
+    secondary = _indicator(
+        "VXUS",
+        price=63.0,
+        high_52w=64.0,
+        drawdown_52w=0.0156,
+        sma200=59.0,
+        deviation_from_sma200=0.0678,
+        sma20=62.5,
+        deviation_from_sma20=0.0080,
+        rsi14=73.0,
+        price_percentile_3y=90.0,
+    )
+    growth = _indicator(
+        "QQQM",
+        price=210.0,
+        high_52w=214.0,
+        drawdown_52w=0.0187,
+        sma200=198.0,
+        deviation_from_sma200=0.0606,
+        sma20=208.0,
+        deviation_from_sma20=0.0096,
+        rsi14=74.0,
+        price_percentile_3y=92.0,
+    )
+    decision = StrategyDecision(
+        state_label="BASELINE_ONLY",
+        action_label="固定总额，维持基线",
+        recommendation_total_rmb=3000,
+        allocation=AllocationBreakdown(
+            core_rmb=2100,
+            secondary_rmb=600,
+            growth_rmb=300,
+            core_weight=0.70,
+            secondary_weight=0.20,
+            growth_weight=0.10,
+        ),
+        baseline_allocation=AllocationBreakdown(
+            core_rmb=2100,
+            secondary_rmb=600,
+            growth_rmb=300,
+            core_weight=0.70,
+            secondary_weight=0.20,
+            growth_weight=0.10,
+        ),
+        reserve_delta_rmb=0,
+        reserve_cash_after_rmb=0,
+        strategy_mode="manual_total_per_asset_signal",
+        reasons=[
+            "本月总投入由手动设定为 3000 RMB，不参与自动增减仓。",
+            "系统分别评估了 VOO、VXUS、QQQM 的原始资产信号。",
+            "尽管部分资产原始信号显示偏热或偏弱，但在三资产零和归一化后，本月未形成明确的相对增减配结果，因此最终维持基线分配。",
+        ],
+        asset_signals=[
+            AssetSignalEvaluation(
+                ticker="VOO",
+                score=-2,
+                classification="STRONG_UNDERWEIGHT",
+                raw_adjustment_pct=-4.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=2100,
+                summary="VOO 至少满足 2 项强减仓条件，可考虑明显低配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="VXUS",
+                score=-2,
+                classification="STRONG_UNDERWEIGHT",
+                raw_adjustment_pct=-4.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=600,
+                summary="VXUS 至少满足 2 项强减仓条件，可考虑明显低配。",
+            ),
+            AssetSignalEvaluation(
+                ticker="QQQM",
+                score=-2,
+                classification="STRONG_UNDERWEIGHT",
+                raw_adjustment_pct=-4.0,
+                normalized_adjustment_pct=0.0,
+                delta_rmb=0,
+                final_rmb=300,
+                summary="QQQM 至少满足 2 项强减仓条件，可考虑明显低配。",
+            ),
+        ],
+        total_is_fixed=True,
+    )
+
+    markdown = render_report(
+        config=config,
+        core=core,
+        secondary=secondary,
+        growth=growth,
+        decision=decision,
+        reserve_cash_rmb=0,
+        report_date=pd.Timestamp("2026-03-28").date(),
+        data_source="Yahoo Finance via yfinance",
+        fetched_at_utc=pd.Timestamp("2026-03-28T03:15:20Z").to_pydatetime(),
+        latest_market_date_core=pd.Timestamp("2026-03-27").date(),
+        latest_market_date_secondary=pd.Timestamp("2026-03-27").date(),
+        latest_market_date_qqqm=pd.Timestamp("2026-03-27").date(),
+        validation_status="PASS",
+    )
+
+    assert "归一化后建议 | 最终调整百分比" in markdown
+    assert "维持基线 | +0.00% | +0" in markdown
+    assert "明显低配 | +0.00%" not in markdown
+    assert "本月相对调整为 0，维持基线" in markdown

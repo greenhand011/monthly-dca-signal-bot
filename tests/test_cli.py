@@ -92,7 +92,9 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     report_files = list(reports_dir.glob("*.md"))
     assert len(report_files) == 1
     content = report_files[0].read_text(encoding="utf-8")
-    assert "## 信号触发详情" in content
+    assert "## 资产原始信号" in content
+    assert "## 归一化后最终建议" in content
+    assert "## 条件检查详情" in content
     assert "## IBKR 执行建议" in content
     assert "## 美元估算" in content
     assert "## 历史信号回顾" in content

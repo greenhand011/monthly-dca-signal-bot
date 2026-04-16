@@ -12,7 +12,16 @@ from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_
 from .fx_converter import build_fx_conversion_summary
 from .historical_review import build_historical_signal_review
 from .indicators import IndicatorComputationError, compute_ticker_indicators
-from .presentation import mode_label, session_label, state_label, validation_label, yes_no
+from .presentation import (
+    final_recommendation_label,
+    mode_label,
+    raw_signal_direction_label,
+    raw_signal_judgment_label,
+    session_label,
+    state_label,
+    validation_label,
+    yes_no,
+)
 from .report_renderer import render_report, report_path_for
 from .reserve_state import dump_state, load_state, utc_now_iso
 from .strategy_engine import evaluate_strategy
@@ -233,9 +242,24 @@ def _run(
         if decision.strategy_mode == "manual_total_per_asset_signal":
             print("当前总投入由手动设定，以下建议仅调整资产间分配，不改变总投入。")
             for signal in decision.asset_signals:
+                base_rmb = next(
+                    (
+                        base
+                        for ticker, base in [
+                            (effective_config.core_ticker, decision.baseline_allocation.core_rmb),
+                            (effective_config.secondary_ticker, decision.baseline_allocation.secondary_rmb),
+                            (effective_config.growth_ticker, decision.baseline_allocation.growth_rmb),
+                        ]
+                        if ticker == signal.ticker
+                    ),
+                    0,
+                )
                 print(
-                    f"{signal.ticker}：基线 {next((base for ticker, base in [(effective_config.core_ticker, decision.baseline_allocation.core_rmb), (effective_config.secondary_ticker, decision.baseline_allocation.secondary_rmb), (effective_config.growth_ticker, decision.baseline_allocation.growth_rmb)] if ticker == signal.ticker), 0)} RMB，"
-                    f"建议 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB），最终 {signal.final_rmb} RMB"
+                    f"{signal.ticker}：原始信号{raw_signal_judgment_label(signal.classification)}，"
+                    f"原始建议{raw_signal_direction_label(signal.classification)}；"
+                    f"归一化后{final_recommendation_label(signal.normalized_adjustment_pct, signal.delta_rmb)}，"
+                    f"最终调整 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB），"
+                    f"基线 {base_rmb} RMB，最终 {signal.final_rmb} RMB"
                 )
         else:
             print(f"{effective_config.core_ticker}：{decision.allocation.core_rmb} RMB")

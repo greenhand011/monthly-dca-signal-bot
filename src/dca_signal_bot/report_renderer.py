@@ -9,11 +9,13 @@ from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_us
 from .historical_review import HistoricalSignalReview
 from .indicators import TickerIndicators
 from .presentation import (
-    asset_signal_label,
     decision_path_label,
+    final_recommendation_label,
     mode_label,
     order_type_label,
     outside_rth_label,
+    raw_signal_direction_label,
+    raw_signal_judgment_label,
     rule_label,
     session_label,
     state_label,
@@ -54,10 +56,42 @@ def _base_amount_for_signal(config: StrategyConfig, decision: StrategyDecision, 
     return decision.baseline_allocation.growth_rmb
 
 
+def _indicator_for_signal(
+    *,
+    config: StrategyConfig,
+    core: TickerIndicators,
+    secondary: TickerIndicators | None,
+    growth: TickerIndicators,
+    ticker: str,
+) -> TickerIndicators:
+    if ticker == config.core_ticker:
+        return core
+    if ticker == config.secondary_ticker and secondary is not None:
+        return secondary
+    return growth
+
+
 def _format_asset_signal_conditions(signal: AssetSignalEvaluation) -> str:
     return "<br>".join(
         f"{condition.label}：{yes_no(condition.passed)}（{condition.observed}，阈值 {condition.threshold}）"
         for condition in signal.conditions
+    )
+
+
+def _format_signal_basis(indicators: TickerIndicators) -> str:
+    return (
+        f"52 周回撤 {indicators.drawdown_52w * 100:.2f}% / "
+        f"相对 200DMA {indicators.deviation_from_sma200 * 100:.2f}% / "
+        f"RSI(14) {indicators.rsi14:.2f}"
+    )
+
+
+def _render_final_adjustment_text(signal: AssetSignalEvaluation) -> str:
+    if signal.delta_rmb == 0:
+        return "原始信号存在偏热或偏弱信息，但在三资产零和归一化后，本月相对调整为 0，维持基线。"
+    return (
+        f"零和归一化后形成{final_recommendation_label(signal.normalized_adjustment_pct, signal.delta_rmb)}，"
+        f"本月建议调整 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB）。"
     )
 
 
@@ -210,42 +244,75 @@ def _render_asset_snapshot(
     return "\n".join(rows)
 
 
-def _render_manual_total_section(
+def _render_manual_raw_signal_section(
+    *,
+    config: StrategyConfig,
+    core: TickerIndicators,
+    secondary: TickerIndicators | None,
+    growth: TickerIndicators,
+    decision: StrategyDecision,
+) -> str:
+    lines = [
+        "## 资产原始信号",
+        "",
+        "- 当前总投入由手动设定。",
+        "- 这里展示的是各资产独立计算后的原始信号，尚未进行零和归一化。",
+        "",
+        "| 资产 | 基线权重 | 基线金额 | 原始信号判断 | 原始信号依据 | 原始建议方向 |",
+        "| --- | ---: | ---: | --- | --- | --- |",
+    ]
+    for signal in decision.asset_signals:
+        base_rmb = _base_amount_for_signal(config, decision, signal)
+        indicators = _indicator_for_signal(
+            config=config,
+            core=core,
+            secondary=secondary,
+            growth=growth,
+            ticker=signal.ticker,
+        )
+        lines.append(
+            f"| {signal.ticker} | {(base_rmb / decision.recommendation_total_rmb) * 100:.2f}% | "
+            f"{base_rmb} | {raw_signal_judgment_label(signal.classification)} | "
+            f"{_format_signal_basis(indicators)} | {raw_signal_direction_label(signal.classification)} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _render_manual_final_section(
     *,
     config: StrategyConfig,
     decision: StrategyDecision,
     fx_summary: FxConversionSummary | None,
 ) -> str:
     lines = [
-        "## 单资产战术建议",
+        "## 归一化后最终建议",
         "",
-        "- 当前总投入由手动设定。",
-        "- 以下加仓/减仓建议仅用于调整资产间分配，不改变本月总投入。",
+        "- 以下建议才是本月可执行的相对增减配结果，总投入保持不变。",
         "",
-        "| 资产 | 基线权重 | 基线金额 | 信号分类 | 调整建议 | RMB 变化 | USD 变化 | 最终建议金额 |",
-        "| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
+        "| 资产 | 基线金额 | 归一化后建议 | 最终调整百分比 | 调整金额（RMB） | 调整金额（USD） | 最终建议金额 | 最终说明 |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for signal in decision.asset_signals:
         base_rmb = _base_amount_for_signal(config, decision, signal)
         usd_delta = _format_delta_usd(signal.delta_rmb, fx_summary)
         lines.append(
-            f"| {signal.ticker} | {(_base_amount_for_signal(config, decision, signal) / decision.recommendation_total_rmb) * 100:.2f}% | "
-            f"{base_rmb} | {asset_signal_label(signal.classification)} | "
-            f"{signal.normalized_adjustment_pct:+.2f}% | {signal.delta_rmb:+d} | {usd_delta} | {signal.final_rmb} |"
+            f"| {signal.ticker} | {base_rmb} | {final_recommendation_label(signal.normalized_adjustment_pct, signal.delta_rmb)} | "
+            f"{signal.normalized_adjustment_pct:+.2f}% | {signal.delta_rmb:+d} | {usd_delta} | {signal.final_rmb} | "
+            f"{_render_final_adjustment_text(signal)} |"
         )
     return "\n".join(lines) + "\n"
 
 
-def _render_manual_signal_details(decision: StrategyDecision) -> str:
+def _render_manual_condition_details(decision: StrategyDecision) -> str:
     lines = [
-        "## 信号触发详情",
+        "## 条件检查详情",
         "",
-        "| 资产 | 评分 | 分类 | 条件检查 | 说明 |",
-        "| --- | ---: | --- | --- | --- |",
+        "| 资产 | 原始信号判断 | 条件检查 | 原始信号说明 |",
+        "| --- | --- | --- | --- |",
     ]
     for signal in decision.asset_signals:
         lines.append(
-            f"| {signal.ticker} | {signal.score:+d} | {asset_signal_label(signal.classification)} | "
+            f"| {signal.ticker} | {raw_signal_judgment_label(signal.classification)} | "
             f"{_format_asset_signal_conditions(signal)} | {signal.summary} |"
         )
     return "\n".join(lines) + "\n"
@@ -325,8 +392,19 @@ def render_report(
     )
 
     if decision.strategy_mode == "manual_total_per_asset_signal":
-        recommendation_section = _render_manual_total_section(config=config, decision=decision, fx_summary=fx_summary).rstrip()
-        trigger_section = _render_manual_signal_details(decision).rstrip()
+        raw_signal_section = _render_manual_raw_signal_section(
+            config=config,
+            core=core,
+            secondary=secondary,
+            growth=growth,
+            decision=decision,
+        ).rstrip()
+        recommendation_section = _render_manual_final_section(
+            config=config,
+            decision=decision,
+            fx_summary=fx_summary,
+        ).rstrip()
+        trigger_section = _render_manual_condition_details(decision).rstrip()
     else:
         recommendation_section = (
             "## 本月建议\n\n"
@@ -379,6 +457,8 @@ def render_report(
         [
             market_section.rstrip(),
             "",
+            raw_signal_section if decision.strategy_mode == "manual_total_per_asset_signal" else "",
+            "" if decision.strategy_mode == "manual_total_per_asset_signal" else "",
             recommendation_section,
             "",
             trigger_section,

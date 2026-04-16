@@ -6,7 +6,13 @@ from typing import Any
 from .config import StrategyConfig
 from .indicators import TickerIndicators
 from .reserve_state import ReserveState
-from .presentation import condition_label, rule_summary
+from .presentation import (
+    condition_label,
+    final_recommendation_label,
+    raw_signal_direction_label,
+    raw_signal_judgment_label,
+    rule_summary,
+)
 
 
 ACTION_NORMAL = "原样投"
@@ -359,7 +365,7 @@ def _build_asset_signal(ticker: str, indicators: TickerIndicators) -> tuple[int,
     elif underweight_count >= 2:
         score = -1
         classification = "UNDERWEIGHT"
-        summary = f"{ticker} 至少满足 2 项减仓条件，可考虑适当低配。"
+        summary = f"{ticker} 至少满足 2 项减仓条件，可考虑轻微低配。"
     else:
         score = 0
         classification = "NEUTRAL"
@@ -469,13 +475,31 @@ def _evaluate_manual_total_per_asset_signal(
     state_label = "TACTICAL_REBALANCE" if total_abs_delta > 0 else "BASELINE_ONLY"
     action_label = ACTION_REBALANCE if total_abs_delta > 0 else ACTION_BASELINE
     decision_path = " | ".join(f"{signal.ticker}:{signal.classification}" for signal in asset_signals)
+    asset_names = "、".join(signal.ticker for signal in asset_signals)
     reasons = [
-        "当前总投入由手动设定，以下加减仓建议仅用于调整资产间分配，不改变本月总投入。",
-        *(
-            f"{signal.ticker}：{signal.summary} 建议调整 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB）。"
-            for signal in asset_signals
-        ),
+        f"本月总投入由手动设定为 {total_rmb} RMB，不参与自动增减仓。",
+        f"系统分别评估了 {asset_names} 的原始资产信号。",
     ]
+    if total_abs_delta == 0:
+        reasons.append(
+            "尽管部分资产原始信号显示偏热或偏弱，但在三资产零和归一化后，本月未形成明确的相对增减配结果，因此最终维持基线分配。"
+        )
+    else:
+        reasons.append("系统已将原始建议归一化为零和分配调整，因此最终只改变资产间配比，不改变本月总投入。")
+
+    reasons.extend(
+        (
+            f"{signal.ticker}：原始信号{raw_signal_judgment_label(signal.classification)}，"
+            f"原始建议{raw_signal_direction_label(signal.classification)}；"
+            + (
+                "但在三资产零和归一化后，本月最终调整为 0，维持基线。"
+                if signal.delta_rmb == 0
+                else f"归一化后最终建议为{final_recommendation_label(signal.normalized_adjustment_pct, signal.delta_rmb)}，"
+                f"调整 {signal.normalized_adjustment_pct:+.2f}%（{signal.delta_rmb:+d} RMB）。"
+            )
+        )
+        for signal in asset_signals
+    )
 
     return StrategyDecision(
         state_label=state_label,

@@ -83,6 +83,21 @@ def _qqqm_indicator() -> TickerIndicators:
     )
 
 
+def _strong_heat_indicator(ticker: str) -> TickerIndicators:
+    return _indicator(
+        ticker,
+        current_price=210.0,
+        high_52w=214.0,
+        drawdown_52w=0.0187,
+        sma200=198.0,
+        deviation_from_sma200=0.0606,
+        sma20=208.0,
+        deviation_from_sma20=0.0096,
+        rsi14=74.0,
+        price_percentile_3y=92.0,
+    )
+
+
 def test_manual_total_mode_evaluates_assets_independently_and_keeps_total_fixed():
     config = load_strategy_config("config/strategy.yaml")
 
@@ -152,6 +167,23 @@ def test_manual_total_mode_uses_same_ratio_for_6000_override_before_tactical_adj
     assert result.baseline_allocation.secondary_rmb == 1200
     assert result.baseline_allocation.growth_rmb == 600
     assert result.allocation.core_rmb + result.allocation.secondary_rmb + result.allocation.growth_rmb == 6000
+
+
+def test_manual_total_mode_reasons_distinguish_raw_signal_from_final_zero_adjustment():
+    config = load_strategy_config("config/strategy.yaml")
+
+    result = evaluate_strategy(
+        config,
+        _strong_heat_indicator("VOO"),
+        _strong_heat_indicator("QQQM"),
+        ReserveState(reserve_cash_rmb=0),
+        secondary_indicators=_strong_heat_indicator("VXUS"),
+    )
+
+    assert all(signal.delta_rmb == 0 for signal in result.asset_signals)
+    assert "原始信号显示偏热或偏弱" in result.reasons[2]
+    assert any("原始信号明显偏热" in reason for reason in result.reasons[3:])
+    assert any("最终调整为 0，维持基线" in reason for reason in result.reasons[3:])
 
 
 def test_legacy_mode_still_exists_for_rollback_safety():

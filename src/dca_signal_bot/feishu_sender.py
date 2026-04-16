@@ -10,10 +10,11 @@ from .execution_guidance import ExecutionGuidance
 from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_usd_estimate
 from .indicators import TickerIndicators
 from .presentation import (
-    asset_signal_label,
+    final_recommendation_label,
     mode_label,
     order_type_label,
     outside_rth_label,
+    raw_signal_judgment_label,
     session_label,
     state_label,
     tif_label,
@@ -68,6 +69,12 @@ def _format_delta_usd(value: int, fx_summary: FxConversionSummary | None) -> str
     return f"{sign}USD {usd:.2f}"
 
 
+def _summary_reason(decision: StrategyDecision) -> str:
+    if decision.strategy_mode == "manual_total_per_asset_signal":
+        return " ".join(decision.reasons[:3])
+    return decision.reasons[-1]
+
+
 def build_summary_text(
     *,
     config: StrategyConfig,
@@ -103,11 +110,11 @@ def build_summary_text(
         )
         for signal in decision.asset_signals:
             base_rmb = _base_amount_for_signal(config, decision, signal.ticker)
+            final_label = final_recommendation_label(signal.normalized_adjustment_pct, signal.delta_rmb)
             lines.append(
-                f"{signal.ticker}：{asset_signal_label(signal.classification)}，"
-                f"基线 {base_rmb} RMB，调整 {signal.normalized_adjustment_pct:+.2f}% "
-                f"({signal.delta_rmb:+d} RMB / {_format_delta_usd(signal.delta_rmb, fx_summary)})，"
-                f"最终 {signal.final_rmb} RMB"
+                f"{signal.ticker}：原始信号{raw_signal_judgment_label(signal.classification)}；"
+                f"最终{final_label}（{signal.delta_rmb:+d} RMB / {_format_delta_usd(signal.delta_rmb, fx_summary)}），"
+                f"基线 {base_rmb} RMB，最终 {signal.final_rmb} RMB"
             )
     else:
         lines.extend(
@@ -131,7 +138,7 @@ def build_summary_text(
             f"最新市场日期：{' / '.join(latest_parts)}",
             f"校验状态：{validation_label(validation_status)}",
             "",
-            f"原因：{decision.reasons[-1]}",
+            f"原因：{_summary_reason(decision)}",
             f"报告：{report_path}",
         ]
     )
@@ -164,7 +171,9 @@ def build_summary_text(
             for signal in decision.asset_signals:
                 base_rmb = _base_amount_for_signal(config, decision, signal.ticker)
                 if fx_summary.rate_cny_per_usd is None:
-                    lines.append(f"- {signal.ticker}：基线 {base_rmb} RMB，调整 {_format_delta_usd(signal.delta_rmb, fx_summary)}，最终 USD 不可用")
+                    lines.append(
+                        f"- {signal.ticker}：基线 {base_rmb} RMB，调整 {signal.delta_rmb:+d} RMB / {_format_delta_usd(signal.delta_rmb, fx_summary)}，最终 USD 不可用"
+                    )
                 else:
                     base_usd = convert_rmb_to_usd(base_rmb, fx_summary.rate_cny_per_usd)
                     final_usd = convert_rmb_to_usd(signal.final_rmb, fx_summary.rate_cny_per_usd)

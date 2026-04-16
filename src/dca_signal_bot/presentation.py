@@ -82,6 +82,22 @@ ASSET_SIGNAL_LABELS = {
     "STRONG_UNDERWEIGHT": "明显低配",
 }
 
+RAW_SIGNAL_JUDGMENT_LABELS = {
+    "STRONG_OVERWEIGHT": "明显偏弱",
+    "OVERWEIGHT": "偏弱",
+    "NEUTRAL": "中性",
+    "UNDERWEIGHT": "偏热",
+    "STRONG_UNDERWEIGHT": "明显偏热",
+}
+
+RAW_SIGNAL_DIRECTION_LABELS = {
+    "STRONG_OVERWEIGHT": "可考虑明显高配",
+    "OVERWEIGHT": "可考虑适度高配",
+    "NEUTRAL": "维持中性",
+    "UNDERWEIGHT": "可考虑轻微低配",
+    "STRONG_UNDERWEIGHT": "可考虑明显低配",
+}
+
 
 def yes_no(value: bool) -> str:
     return YES_NO_LABELS[bool(value)]
@@ -142,10 +158,10 @@ def decision_path_label(text: str) -> str:
         ("TACTICAL_REBALANCE", "资产级调整"),
         ("BASELINE_ONLY", "维持基线"),
         ("STRONG_OVERWEIGHT", "明显高配"),
+        ("STRONG_UNDERWEIGHT", "明显低配"),
         ("OVERWEIGHT", "适度高配"),
         ("NEUTRAL", "维持基线"),
         ("UNDERWEIGHT", "适度低配"),
-        ("STRONG_UNDERWEIGHT", "明显低配"),
         ("YES", "是"),
         ("NO", "否"),
     ]
@@ -157,3 +173,24 @@ def decision_path_label(text: str) -> str:
 
 def asset_signal_label(label: str) -> str:
     return ASSET_SIGNAL_LABELS.get(label, label)
+
+
+def raw_signal_judgment_label(label: str) -> str:
+    return RAW_SIGNAL_JUDGMENT_LABELS.get(label, label)
+
+
+def raw_signal_direction_label(label: str) -> str:
+    return RAW_SIGNAL_DIRECTION_LABELS.get(label, label)
+
+
+def final_recommendation_label(
+    normalized_adjustment_pct: float,
+    delta_rmb: int,
+    *,
+    zero_threshold_pct: float = 0.005,
+) -> str:
+    if abs(delta_rmb) == 0 or abs(normalized_adjustment_pct) < zero_threshold_pct:
+        return "维持基线"
+    if normalized_adjustment_pct > 0:
+        return "适度高配"
+    return "适度低配"
