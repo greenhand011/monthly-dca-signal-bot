@@ -9,6 +9,7 @@ import requests
 from dca_signal_bot.execution_guidance import ExecutionGuidance
 from dca_signal_bot.feishu_sender import FeishuError, build_summary_text, maybe_send_feishu, send_feishu_text
 from dca_signal_bot.fx_converter import FxConversionSummary
+from dca_signal_bot.gold_sleeve import GoldSleeveDecision
 from dca_signal_bot.strategy_engine import AllocationBreakdown, AssetSignalEvaluation, StrategyDecision
 
 
@@ -180,6 +181,36 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         extra_usd={"VXUS": 91.67},
         note="汇率换算完成。",
     )
+    gold_decision = GoldSleeveDecision(
+        enabled=True,
+        ticker="GLDM",
+        decision_status="BUY",
+        action_label="可考虑小幅买入",
+        should_buy=True,
+        data_source="Yahoo Finance via yfinance",
+        validation_status="PASS",
+        latest_market_date=datetime(2026, 3, 30, tzinfo=timezone.utc).date(),
+        current_gold_weight=0.01,
+        target_gold_weight=0.03,
+        max_gold_weight=0.05,
+        below_target=True,
+        overheat_triggered=False,
+        total_score=4.0,
+        technical_score=4.0,
+        macro_score=0.0,
+        optional_score=0.0,
+        target_gold_value_rmb=3000,
+        target_gap_value_rmb=2000,
+        recommended_buy_rmb=500,
+        projected_gold_weight_after_buy=0.015,
+        remaining_gap_after_buy_rmb=1500,
+        reason="综合评分 4.0，达到轻仓补位区间，可考虑买入目标缺口的 25%。",
+        notes=[],
+        overheat_reasons=[],
+        score_details=[],
+        optional_data_notes=[],
+        indicator_snapshot=None,
+    )
 
     summary = build_summary_text(
         config=SimpleNamespace(core_ticker="VOO", secondary_ticker="VXUS", growth_ticker="QQQM"),
@@ -195,6 +226,7 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
         run_mode_label="正式模式",
         execution_guidance=guidance,
         fx_summary=fx_summary,
+        gold_decision=gold_decision,
     )
 
     assert "IBKR 执行建议：" in summary
@@ -205,6 +237,9 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
     assert "QQQM：原始信号明显偏热；最终适度低配" in summary
     assert "VOO：基线约 USD" in summary
     assert "原因：按基线配比执行。" in summary
+    assert "黄金保险仓判定：" in summary
+    assert "GLDM" in summary
+    assert "可考虑小幅买入" in summary
 
 
 def test_summary_text_zero_final_delta_is_not_described_as_direct_underweight():

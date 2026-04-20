@@ -16,6 +16,28 @@ preferred_order_type: LIMIT
 preferred_tif: DAY
 suggest_outside_rth: true
 
+gold_sleeve:
+  enabled: true
+  ticker: GLDM
+  target_weight: 0.03
+  max_weight: 0.05
+  monthly_check_enabled: true
+  buy_score_threshold: 3.0
+  full_rebalance_months: 6
+  current_total_portfolio_value_rmb: 0
+  current_gold_value_rmb: 0
+  emergency_fund_ok: true
+  overheat_rsi_max: 72
+  overheat_ma200_ratio_max: 1.15
+  overheat_60d_high_distance_max: 0.03
+  overheat_20d_return_max: 0.08
+  dxy_ticker: DX-Y.NYB
+  vix_ticker: ^VIX
+  spy_ticker: SPY
+  real_yield_ticker: null
+  central_bank_support: null
+  gold_etf_flow_support: null
+
 thresholds:
   extreme_heat:
     drawdown_max: 0.02

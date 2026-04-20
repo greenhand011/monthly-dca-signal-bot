@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
 from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_usd_estimate
+from .gold_sleeve import GoldSleeveDecision
 from .indicators import TickerIndicators
 from .presentation import (
     final_recommendation_label,
@@ -75,6 +76,15 @@ def _summary_reason(decision: StrategyDecision) -> str:
     return decision.reasons[-1]
 
 
+def _format_gold_buy_line(gold_decision: GoldSleeveDecision, fx_summary: FxConversionSummary | None) -> str:
+    buy_rmb = gold_decision.recommended_buy_rmb or 0
+    if fx_summary is None or fx_summary.rate_cny_per_usd is None:
+        usd_text = "USD 不可用"
+    else:
+        usd_text = f"约 USD {convert_rmb_to_usd(buy_rmb, fx_summary.rate_cny_per_usd):.2f}"
+    return f"{buy_rmb} RMB（{usd_text}）"
+
+
 def build_summary_text(
     *,
     config: StrategyConfig,
@@ -90,6 +100,7 @@ def build_summary_text(
     run_mode_label: str | None = None,
     execution_guidance: ExecutionGuidance | None = None,
     fx_summary: FxConversionSummary | None = None,
+    gold_decision: GoldSleeveDecision | None = None,
 ) -> str:
     _ = growth
     lines = [
@@ -156,6 +167,29 @@ def build_summary_text(
                 f"- 建议下单设置：{order_type_label(execution_guidance.preferred_order_type)} / "
                 f"{tif_label(execution_guidance.preferred_tif)} / "
                 f"{outside_rth_label(execution_guidance.suggest_outside_rth)}",
+            ]
+        )
+
+    if gold_decision is not None:
+        lines.extend(
+            [
+                "",
+                "黄金保险仓判定：",
+                f"- 标的：{gold_decision.ticker}",
+                f"- 当前黄金仓位：{gold_decision.current_gold_weight * 100:.2f}%"
+                if gold_decision.current_gold_weight is not None
+                else "- 当前黄金仓位：不可用",
+                f"- 目标黄金仓位：{gold_decision.target_gold_weight * 100:.2f}%",
+                f"- 是否触发过热过滤：{yes_no(bool(gold_decision.overheat_triggered))}"
+                if gold_decision.overheat_triggered is not None
+                else "- 是否触发过热过滤：不可用",
+                f"- 综合评分：{gold_decision.total_score:.1f}" if gold_decision.total_score is not None else "- 综合评分：不可用",
+                f"- 建议：{gold_decision.action_label}",
+                f"- 建议买入金额：{_format_gold_buy_line(gold_decision, fx_summary)}",
+                f"- 买入后黄金仓位：{gold_decision.projected_gold_weight_after_buy * 100:.2f}%"
+                if gold_decision.projected_gold_weight_after_buy is not None
+                else "- 买入后黄金仓位：不可用",
+                f"- 说明：{gold_decision.reason}",
             ]
         )
 

@@ -10,6 +10,7 @@ from .data_fetcher import DATA_SOURCE, DataFetchError, fetch_histories
 from .execution_guidance import build_execution_guidance
 from .feishu_sender import FeishuError, build_failure_alert_text, build_summary_text, maybe_send_feishu
 from .fx_converter import build_fx_conversion_summary
+from .gold_sleeve import evaluate_gold_sleeve
 from .historical_review import build_historical_signal_review
 from .indicators import IndicatorComputationError, compute_ticker_indicators
 from .presentation import (
@@ -175,6 +176,10 @@ def _run(
             growth_history=growth_history.history,
             months=review_months,
         )
+        gold_decision = evaluate_gold_sleeve(
+            effective_config.gold_sleeve,
+            reference_date=report_date,
+        )
 
         report_path = report_path_for(reports_dir, report_date)
         report_markdown = render_report(
@@ -195,6 +200,7 @@ def _run(
             historical_review=historical_review,
             execution_guidance=execution_guidance,
             fx_summary=fx_summary,
+            gold_decision=gold_decision,
         )
         report_path.write_text(report_markdown, encoding="utf-8")
 
@@ -219,6 +225,7 @@ def _run(
             run_mode_label=run_mode_label,
             execution_guidance=execution_guidance,
             fx_summary=fx_summary,
+            gold_decision=gold_decision,
         )
 
         feishu_sent = False
@@ -267,6 +274,14 @@ def _run(
                 print(f"{effective_config.secondary_ticker}：{decision.allocation.secondary_rmb} RMB")
             print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
         print(f"储备金余额：{decision.reserve_cash_after_rmb} RMB")
+        print(f"黄金保险仓：{gold_decision.action_label}")
+        if gold_decision.current_gold_weight is not None:
+            print(
+                f"{gold_decision.ticker}：当前 {gold_decision.current_gold_weight * 100:.2f}% / "
+                f"目标 {gold_decision.target_gold_weight * 100:.2f}% / "
+                f"建议买入 {(gold_decision.recommended_buy_rmb or 0)} RMB"
+            )
+        print(f"黄金说明：{gold_decision.reason}")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(
             "IBKR 当前交易阶段："

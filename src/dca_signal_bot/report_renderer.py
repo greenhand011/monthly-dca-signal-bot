@@ -6,6 +6,7 @@ from pathlib import Path
 from .config import StrategyConfig
 from .execution_guidance import ExecutionGuidance
 from .fx_converter import FxConversionSummary, convert_rmb_to_usd, format_rmb_usd_estimate
+from .gold_sleeve import GoldSleeveDecision
 from .historical_review import HistoricalSignalReview
 from .indicators import TickerIndicators
 from .presentation import (
@@ -46,6 +47,14 @@ def _format_delta_usd(value: int, fx_summary: FxConversionSummary | None) -> str
     usd = convert_rmb_to_usd(abs(value), fx_summary.rate_cny_per_usd)
     sign = "+" if value >= 0 else "-"
     return f"{sign}USD {usd:.2f}"
+
+
+def _format_gold_usd_amount(amount_rmb: int | None, fx_summary: FxConversionSummary | None) -> str:
+    if amount_rmb is None:
+        return "美元估算不可用"
+    if fx_summary is None or fx_summary.rate_cny_per_usd is None:
+        return "美元估算不可用"
+    return f"约 USD {convert_rmb_to_usd(amount_rmb, fx_summary.rate_cny_per_usd):.2f}"
 
 
 def _base_amount_for_signal(config: StrategyConfig, decision: StrategyDecision, signal: AssetSignalEvaluation) -> int:
@@ -170,6 +179,75 @@ def _render_execution_guidance(guidance: ExecutionGuidance) -> str:
         f"{warnings}\n"
         f"{notes}\n"
     )
+
+
+def _render_gold_sleeve_section(
+    gold_decision: GoldSleeveDecision,
+    *,
+    fx_summary: FxConversionSummary | None,
+) -> str:
+    lines = [
+        "## 黄金保险仓判定",
+        "",
+        f"- 标的：`{gold_decision.ticker}`",
+        f"- 数据来源：{gold_decision.data_source}",
+        f"- 校验状态：{validation_label(gold_decision.validation_status)}",
+    ]
+    if gold_decision.latest_market_date is not None:
+        lines.append(f"- 最新市场日期：{gold_decision.latest_market_date.isoformat()}")
+
+    if gold_decision.current_gold_weight is not None:
+        lines.extend(
+            [
+                f"- 当前黄金仓位：`{gold_decision.current_gold_weight * 100:.2f}%`",
+                f"- 目标黄金仓位：`{gold_decision.target_gold_weight * 100:.2f}%`",
+                f"- 黄金上限仓位：`{gold_decision.max_gold_weight * 100:.2f}%`",
+                f"- 当前是否低于目标：`{yes_no(bool(gold_decision.below_target))}`",
+            ]
+        )
+    if gold_decision.overheat_triggered is not None:
+        lines.append(f"- 是否触发过热过滤：`{yes_no(gold_decision.overheat_triggered)}`")
+    if gold_decision.total_score is not None:
+        lines.extend(
+            [
+                f"- 综合评分：`{gold_decision.total_score:.1f}`",
+                f"- 技术分：`{gold_decision.technical_score:.1f}` / 宏观分：`{gold_decision.macro_score:.1f}` / 慢变量分：`{gold_decision.optional_score:.1f}`",
+            ]
+        )
+
+    buy_rmb = gold_decision.recommended_buy_rmb or 0
+    lines.extend(
+        [
+            f"- 建议：`{gold_decision.action_label}`",
+            f"- 建议买入金额：`{buy_rmb} RMB（{_format_gold_usd_amount(gold_decision.recommended_buy_rmb, fx_summary)}）`",
+        ]
+    )
+    if gold_decision.projected_gold_weight_after_buy is not None:
+        lines.append(f"- 建议买入后黄金仓位：`{gold_decision.projected_gold_weight_after_buy * 100:.2f}%`")
+    if gold_decision.remaining_gap_after_buy_rmb is not None:
+        lines.append(f"- 买入后距目标仍差：`{gold_decision.remaining_gap_after_buy_rmb} RMB`")
+    lines.extend(
+        [
+            f"- 说明：{gold_decision.reason}",
+            "- 黄金模块为保险仓择时补仓，不参与主仓月频定投。",
+        ]
+    )
+    if gold_decision.overheat_reasons:
+        lines.append("")
+        lines.append("### 过热过滤说明")
+        lines.append("")
+        lines.extend(f"- {reason}" for reason in gold_decision.overheat_reasons)
+    if gold_decision.score_details:
+        lines.append("")
+        lines.append("### 评分细项")
+        lines.append("")
+        lines.extend(f"- {detail}" for detail in gold_decision.score_details)
+    if gold_decision.optional_data_notes:
+        lines.append("")
+        lines.append("### 可选因子说明")
+        lines.append("")
+        lines.extend(f"- {note}" for note in gold_decision.optional_data_notes)
+    return "\n".join(lines) + "\n"
 
 
 def _render_fx_section(
@@ -356,6 +434,7 @@ def render_report(
     historical_review: HistoricalSignalReview | None = None,
     execution_guidance: ExecutionGuidance | None = None,
     fx_summary: FxConversionSummary | None = None,
+    gold_decision: GoldSleeveDecision | None = None,
 ) -> str:
     data_lines = [
         "## 数据信息",
@@ -376,6 +455,7 @@ def render_report(
 
     execution_section = _render_execution_guidance(execution_guidance).rstrip() if execution_guidance is not None else ""
     fx_section = _render_fx_section(fx_summary, config=config, decision=decision).rstrip() if fx_summary is not None else ""
+    gold_section = _render_gold_sleeve_section(gold_decision, fx_summary=fx_summary).rstrip() if gold_decision is not None else ""
     historical_section = ""
     if historical_review is not None:
         historical_section = (
@@ -453,6 +533,8 @@ def render_report(
         body.extend([execution_section, ""])
     if fx_section:
         body.extend([fx_section, ""])
+    if gold_section:
+        body.extend([gold_section, ""])
     body.extend(
         [
             market_section.rstrip(),

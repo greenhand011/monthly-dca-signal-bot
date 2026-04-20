@@ -11,6 +11,7 @@
 - 每个月总投入设多少
 - `VOO`、`VXUS` 和 `QQQM` 各自本月应不应该适度高配或低配
 - 在总投入固定的前提下，三只 ETF 之间应该怎样调整分配
+- 如果你把 `GLDM` 当作保险仓，本月是否值得开仓或补仓
 - 如果你在 IBKR 手动执行，现在更适合怎样下单
 - 如果你想观察未来把月投基线从 `3000 RMB` 调到 `6000 RMB` 会怎样变化，如何安全模拟而不污染正式状态
 
@@ -19,6 +20,7 @@
 `monthly-dca-signal-bot` is a small open-source monthly DCA execution assistant. It is intentionally not a prediction engine and not an automated trading bot. It fetches real market data, validates it strictly, applies a simple rule set, and produces a monthly recommendation that is easy to review and execute manually.
 
 The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations as the source of truth, and applies independent per-asset tactical signals while holding the monthly total contribution fixed.
+It also includes an optional sidecar `GLDM` gold insurance sleeve helper that is evaluated separately from the core monthly engine.
 
 ## Why This Project Exists
 
@@ -33,6 +35,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 - 严格校验 `VOO`、`VXUS`、`QQQM` 的市场数据是否完整、足够新、足够长
 - 基于 `VOO`、`VXUS`、`QQQM` 各自独立信号给出资产级高配/低配建议
 - 在总投入固定的前提下输出每个资产的基线金额、调整幅度和最终建议金额
+- 提供独立的 `GLDM` 黄金保险仓判定：先看是否低于目标仓位，再看是否过热，最后按评分决定本月是否买以及买多少
 - 生成 Markdown 月报到 `reports/YYYY-MM-report.md`
 - 仅在正式模式成功运行后更新 `state/reserve_state.json`
 - 按需发送飞书摘要
@@ -46,6 +49,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 - 不自动交易
 - 不连接券商 API 下单
 - 不加入卖出逻辑
+- 不把 `GLDM` 混入主仓 `VOO / VXUS / QQQM` 月频定投引擎
 - 不在市场数据失败时使用 fake/sample/fallback 数据伪造成功
 - 不在模拟模式下默认修改正式储备金状态
 
@@ -56,6 +60,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 - 默认基线月投：`3000 RMB`
 - `3000 RMB` 示例：`VOO 2100 / VXUS 600 / QQQM 300`
 - `6000 RMB` 示例：`VOO 4200 / VXUS 1200 / QQQM 600`
+- 黄金保险仓：`GLDM`，默认作为独立 sidecar 模块，不参与主仓月投拆分
 - 默认策略模式：`manual_total_per_asset_signal`
 - 储备金上限：`base_monthly_rmb * reserve_cap_multiple`
 - 市场数据源：Yahoo Finance via `yfinance`
@@ -71,6 +76,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 6. 渲染 Markdown 报告
 7. 按需发送飞书摘要
 8. 仅在正式模式且成功运行后更新状态文件
+9. 若启用 `GLDM` 保险仓模块，则单独评估本月是否值得买入，以及建议买入多少
 
 ## Data Integrity and Failure Behavior
 
@@ -102,6 +108,7 @@ The current production setup uses `VOO + VXUS + QQQM`, keeps RMB recommendations
 
 - `信号触发详情`
 - `历史信号回顾`
+- `黄金保险仓判定`
 - `IBKR 执行建议`
 - `美元估算`
 
@@ -152,6 +159,11 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - `preferred_order_type`
 - `preferred_tif`
 - `suggest_outside_rth`
+- `gold_sleeve.enabled`
+- `gold_sleeve.current_total_portfolio_value_rmb`
+- `gold_sleeve.current_gold_value_rmb`
+- `gold_sleeve.target_weight`
+- `gold_sleeve.max_weight`
 
 ## GitHub Actions
 
@@ -189,6 +201,7 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - 校验状态
 - 原因
 - 报告路径
+- `GLDM` 黄金保险仓建议
 - 简版 IBKR 执行建议
 - 简版美元估算
 
@@ -211,6 +224,29 @@ FEISHU_KEYWORD=你的关键字
 - 只放大或缩小总投入，不自动切换另一套 ETF 搭配
 - 当前默认无论 `3000` 还是 `6000`，都使用 `70/20/10`
 - 默认不修改正式储备金状态
+
+## GLDM Gold Sleeve
+
+`GLDM` 是一个单独的黄金保险仓辅助模块，不属于主仓 `VOO / VXUS / QQQM` 月频定投引擎。
+
+它的决策顺序是：
+
+1. 先看当前黄金仓位是否低于目标仓位
+2. 再看是否触发过热过滤
+3. 最后用简单评分判断本月是否值得补仓
+
+买入金额不是固定值，而是基于目标缺口计算：
+
+- `target_gold_value = current_total_portfolio_value_rmb * target_weight`
+- `target_gap_value = max(target_gold_value - current_gold_value_rmb, 0)`
+- 若评分不足则不买
+- 若评分达到区间，则买入目标缺口的 `25% / 50% / 100%`
+
+注意：
+
+- `GLDM` 使用 Yahoo Finance via `yfinance` 的 `GLDM` 调整后收盘价作为主判断价格代理
+- 可选宏观因子如果缺失，不会伪造数据，也不会让整个主仓月报崩溃
+- `GLDM` 只是保险仓择时补仓提示，不是自动交易
 
 ## Example Output
 

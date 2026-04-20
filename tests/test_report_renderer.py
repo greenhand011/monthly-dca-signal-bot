@@ -8,6 +8,7 @@ import pandas as pd
 from dca_signal_bot.config import load_strategy_config
 from dca_signal_bot.execution_guidance import ExecutionGuidance
 from dca_signal_bot.fx_converter import FxConversionSummary
+from dca_signal_bot.gold_sleeve import GoldSleeveDecision
 from dca_signal_bot.historical_review import HistoricalSignalReview, HistoricalSignalReviewRow
 from dca_signal_bot.indicators import TickerIndicators
 from dca_signal_bot.report_renderer import render_report
@@ -41,6 +42,39 @@ def _indicator(
         deviation_from_sma20=deviation_from_sma20,
         rsi14=rsi14,
         price_percentile_3y=price_percentile_3y,
+    )
+
+
+def _gold_decision() -> GoldSleeveDecision:
+    return GoldSleeveDecision(
+        enabled=True,
+        ticker="GLDM",
+        decision_status="BUY",
+        action_label="可考虑小幅买入",
+        should_buy=True,
+        data_source="Yahoo Finance via yfinance",
+        validation_status="PASS",
+        latest_market_date=pd.Timestamp("2026-03-27").date(),
+        current_gold_weight=0.01,
+        target_gold_weight=0.03,
+        max_gold_weight=0.05,
+        below_target=True,
+        overheat_triggered=False,
+        total_score=4.0,
+        technical_score=4.0,
+        macro_score=0.0,
+        optional_score=0.0,
+        target_gold_value_rmb=3000,
+        target_gap_value_rmb=2000,
+        recommended_buy_rmb=500,
+        projected_gold_weight_after_buy=0.015,
+        remaining_gap_after_buy_rmb=1500,
+        reason="综合评分 4.0，达到轻仓补位区间，可考虑买入目标缺口的 25%。",
+        notes=["黄金模块为保险仓择时补仓，不参与主仓月频定投。"],
+        overheat_reasons=[],
+        score_details=["技术项 +2：距 120 日高点回撤落在 8%-15% 区间。"],
+        optional_data_notes=["10Y 实际利率代理本月未配置，未纳入评分。"],
+        indicator_snapshot=None,
     )
 
 
@@ -162,6 +196,7 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
         historical_review=review,
         execution_guidance=guidance,
         fx_summary=fx_summary,
+        gold_decision=_gold_decision(),
     )
 
     assert "模拟模式：基线月投金额 = 6000" in markdown
@@ -181,6 +216,10 @@ def test_render_report_contains_trigger_details_historical_review_and_simulation
     assert "否" in markdown
     assert "final_decision_path" not in markdown
     assert "## 历史信号回顾（最近 1 个月）" in markdown
+    assert "## 黄金保险仓判定" in markdown
+    assert "GLDM" in markdown
+    assert "可考虑小幅买入" in markdown
+    assert "建议买入金额" in markdown
     assert "仅用于信号观察的历史回顾" in markdown
     assert "2026-03" in markdown
     assert "调整金额（RMB）" in markdown
@@ -305,6 +344,7 @@ def test_render_report_zero_final_delta_uses_maintain_baseline_wording():
         latest_market_date_secondary=pd.Timestamp("2026-03-27").date(),
         latest_market_date_qqqm=pd.Timestamp("2026-03-27").date(),
         validation_status="PASS",
+        gold_decision=_gold_decision(),
     )
 
     assert "归一化后建议 | 最终调整百分比" in markdown

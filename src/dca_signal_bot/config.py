@@ -53,6 +53,30 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
 
 
 @dataclass(frozen=True)
+class GoldSleeveConfig:
+    enabled: bool = True
+    ticker: str = "GLDM"
+    target_weight: float = 0.03
+    max_weight: float = 0.05
+    monthly_check_enabled: bool = True
+    buy_score_threshold: float = 3.0
+    full_rebalance_months: int = 6
+    current_total_portfolio_value_rmb: int = 0
+    current_gold_value_rmb: int = 0
+    emergency_fund_ok: bool = True
+    overheat_rsi_max: float = 72.0
+    overheat_ma200_ratio_max: float = 1.15
+    overheat_60d_high_distance_max: float = 0.03
+    overheat_20d_return_max: float = 0.08
+    dxy_ticker: str | None = "DX-Y.NYB"
+    vix_ticker: str | None = "^VIX"
+    spy_ticker: str | None = "SPY"
+    real_yield_ticker: str | None = None
+    central_bank_support: float | None = None
+    gold_etf_flow_support: float | None = None
+
+
+@dataclass(frozen=True)
 class StrategyConfig:
     strategy_name: str = "monthly-dca-signal-bot"
     strategy_mode: str = "manual_total_per_asset_signal"
@@ -75,6 +99,7 @@ class StrategyConfig:
         default_factory=lambda: {name: dict(values) for name, values in DEFAULT_THRESHOLDS.items()}
     )
     base_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    gold_sleeve: GoldSleeveConfig = field(default_factory=GoldSleeveConfig)
 
     @property
     def reserve_cap_rmb(self) -> int:
@@ -121,6 +146,47 @@ def _validate_weights(core_weight: float, secondary_weight: float, growth_weight
             "Normal weights must sum to 1.0; "
             f"got core={core_weight:.4f}, secondary={secondary_weight:.4f}, growth={growth_weight:.4f}"
         )
+
+
+def _normalize_optional_ticker(value: Any) -> str | None:
+    if value in ("", None):
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    return str(value)
+
+
+def _validate_gold_sleeve_config(config: GoldSleeveConfig) -> None:
+    if config.target_weight < 0:
+        raise ValueError("gold_sleeve.target_weight must be >= 0")
+    if config.max_weight < 0:
+        raise ValueError("gold_sleeve.max_weight must be >= 0")
+    if config.target_weight > config.max_weight:
+        raise ValueError("gold_sleeve.target_weight must be <= gold_sleeve.max_weight")
+    if config.buy_score_threshold < 0:
+        raise ValueError("gold_sleeve.buy_score_threshold must be >= 0")
+    if config.full_rebalance_months < 1:
+        raise ValueError("gold_sleeve.full_rebalance_months must be >= 1")
+    if config.current_total_portfolio_value_rmb < 0:
+        raise ValueError("gold_sleeve.current_total_portfolio_value_rmb must be >= 0")
+    if config.current_gold_value_rmb < 0:
+        raise ValueError("gold_sleeve.current_gold_value_rmb must be >= 0")
+    if config.overheat_rsi_max <= 0:
+        raise ValueError("gold_sleeve.overheat_rsi_max must be > 0")
+    if config.overheat_ma200_ratio_max <= 0:
+        raise ValueError("gold_sleeve.overheat_ma200_ratio_max must be > 0")
+    if config.overheat_60d_high_distance_max < 0:
+        raise ValueError("gold_sleeve.overheat_60d_high_distance_max must be >= 0")
+    if config.overheat_20d_return_max < 0:
+        raise ValueError("gold_sleeve.overheat_20d_return_max must be >= 0")
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in ("", None):
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    return float(value)
 
 
 def _deep_merge(default: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
@@ -217,12 +283,31 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         else:
             raise ValueError("base_overrides values must be mappings of override settings")
 
-    def normalize_optional_ticker(value: Any) -> str | None:
-        if value in ("", None):
-            return None
-        if isinstance(value, dict) and not value:
-            return None
-        return str(value)
+    gold_raw = raw.get("gold_sleeve", {}) or {}
+    if not isinstance(gold_raw, dict):
+        raise ValueError("gold_sleeve must be a mapping")
+    gold_sleeve = GoldSleeveConfig(
+        enabled=bool(gold_raw.get("enabled", True)),
+        ticker=str(gold_raw.get("ticker", "GLDM")),
+        target_weight=float(gold_raw.get("target_weight", 0.03)),
+        max_weight=float(gold_raw.get("max_weight", 0.05)),
+        monthly_check_enabled=bool(gold_raw.get("monthly_check_enabled", True)),
+        buy_score_threshold=float(gold_raw.get("buy_score_threshold", 3.0)),
+        full_rebalance_months=int(gold_raw.get("full_rebalance_months", 6)),
+        current_total_portfolio_value_rmb=int(gold_raw.get("current_total_portfolio_value_rmb", 0)),
+        current_gold_value_rmb=int(gold_raw.get("current_gold_value_rmb", 0)),
+        emergency_fund_ok=bool(gold_raw.get("emergency_fund_ok", True)),
+        overheat_rsi_max=float(gold_raw.get("overheat_rsi_max", 72.0)),
+        overheat_ma200_ratio_max=float(gold_raw.get("overheat_ma200_ratio_max", 1.15)),
+        overheat_60d_high_distance_max=float(gold_raw.get("overheat_60d_high_distance_max", 0.03)),
+        overheat_20d_return_max=float(gold_raw.get("overheat_20d_return_max", 0.08)),
+        dxy_ticker=_normalize_optional_ticker(gold_raw.get("dxy_ticker", "DX-Y.NYB")),
+        vix_ticker=_normalize_optional_ticker(gold_raw.get("vix_ticker", "^VIX")),
+        spy_ticker=_normalize_optional_ticker(gold_raw.get("spy_ticker", "SPY")),
+        real_yield_ticker=_normalize_optional_ticker(gold_raw.get("real_yield_ticker")),
+        central_bank_support=_optional_float(gold_raw.get("central_bank_support")),
+        gold_etf_flow_support=_optional_float(gold_raw.get("gold_etf_flow_support")),
+    )
 
     config = StrategyConfig(
         strategy_name=str(raw.get("strategy_name", "monthly-dca-signal-bot")),
@@ -230,7 +315,7 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         base_monthly_rmb=int(raw.get("base_monthly_rmb", 3000)),
         reserve_cap_multiple=float(raw.get("reserve_cap_multiple", 2.0)),
         core_ticker=str(raw.get("core_ticker", "VOO")),
-        secondary_ticker=normalize_optional_ticker(raw.get("secondary_ticker", "VXUS")),
+        secondary_ticker=_normalize_optional_ticker(raw.get("secondary_ticker", "VXUS")),
         growth_ticker=str(raw.get("growth_ticker", "QQQM")),
         core_weight_normal=float(raw.get("core_weight_normal", 0.70)),
         secondary_weight_normal=float(raw.get("secondary_weight_normal", 0.20)),
@@ -244,9 +329,11 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         suggest_outside_rth=bool(raw.get("suggest_outside_rth", True)),
         thresholds=merged_thresholds,
         base_overrides=normalized_overrides,
+        gold_sleeve=gold_sleeve,
     )
     _validate_strategy_mode(config.strategy_mode)
     _validate_weights(config.core_weight_normal, config.secondary_weight_normal, config.growth_weight_normal)
+    _validate_gold_sleeve_config(config.gold_sleeve)
     for override in base_overrides.values():
         _validate_strategy_mode(str(override.get("strategy_mode", config.strategy_mode)))
         _validate_weights(
