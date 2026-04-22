@@ -279,8 +279,11 @@ def _run(
             print(
                 f"{gold_decision.ticker}：当前 {gold_decision.current_gold_weight * 100:.2f}% / "
                 f"目标 {gold_decision.target_gold_weight * 100:.2f}% / "
+                f"上限 {gold_decision.max_gold_weight * 100:.2f}% / "
                 f"建议买入 {(gold_decision.recommended_buy_rmb or 0)} RMB"
             )
+        if gold_decision.remaining_gap_after_buy_rmb is not None:
+            print(f"买入后距目标仍差：{gold_decision.remaining_gap_after_buy_rmb} RMB")
         print(f"黄金说明：{gold_decision.reason}")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(

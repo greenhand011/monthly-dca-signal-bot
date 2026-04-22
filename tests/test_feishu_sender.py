@@ -240,6 +240,8 @@ def test_summary_text_includes_execution_guidance_and_usd_estimates():
     assert "黄金保险仓判定：" in summary
     assert "GLDM" in summary
     assert "可考虑小幅买入" in summary
+    assert "黄金上限仓位" in summary
+    assert "买入后距目标仍差" in summary
 
 
 def test_summary_text_zero_final_delta_is_not_described_as_direct_underweight():

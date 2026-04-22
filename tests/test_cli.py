@@ -98,6 +98,7 @@ def test_cli_success_path_generates_report_and_state(monkeypatch):
     assert "## IBKR 执行建议" in content
     assert "## 美元估算" in content
     assert "## 历史信号回顾" in content
+    assert "黄金保险仓判定" in content
     assert "正式模式" in content
     assert "VOO" in content
     assert "VXUS" in content
@@ -140,6 +141,8 @@ def test_cli_success_path_sends_feishu_notification(monkeypatch):
     assert "VXUS" in sent_messages[0]
     assert "IBKR 执行建议" in sent_messages[0]
     assert "美元估算" in sent_messages[0]
+    assert "黄金上限仓位" in sent_messages[0]
+    assert "买入后距目标仍差" in sent_messages[0]
 
 
 def test_cli_simulation_mode_skips_state_mutation_and_labels_report(monkeypatch):

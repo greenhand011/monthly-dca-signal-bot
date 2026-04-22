@@ -180,6 +180,7 @@ def build_summary_text(
                 if gold_decision.current_gold_weight is not None
                 else "- 当前黄金仓位：不可用",
                 f"- 目标黄金仓位：{gold_decision.target_gold_weight * 100:.2f}%",
+                f"- 黄金上限仓位：{gold_decision.max_gold_weight * 100:.2f}%",
                 f"- 是否触发过热过滤：{yes_no(bool(gold_decision.overheat_triggered))}"
                 if gold_decision.overheat_triggered is not None
                 else "- 是否触发过热过滤：不可用",
@@ -189,6 +190,9 @@ def build_summary_text(
                 f"- 买入后黄金仓位：{gold_decision.projected_gold_weight_after_buy * 100:.2f}%"
                 if gold_decision.projected_gold_weight_after_buy is not None
                 else "- 买入后黄金仓位：不可用",
+                f"- 买入后距目标仍差：{gold_decision.remaining_gap_after_buy_rmb} RMB"
+                if gold_decision.remaining_gap_after_buy_rmb is not None
+                else "- 买入后距目标仍差：不可用",
                 f"- 说明：{gold_decision.reason}",
             ]
         )
