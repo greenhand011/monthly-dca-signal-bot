@@ -52,6 +52,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=12,
         help="How many recent month-end snapshots to include in the historical signal review.",
     )
+    run_parser.add_argument(
+        "--current-total-portfolio-value-rmb",
+        type=int,
+        default=None,
+        help="Current total portfolio value in RMB for gold sleeve evaluation.",
+    )
+    run_parser.add_argument(
+        "--current-gldm-shares",
+        type=float,
+        default=None,
+        help="Current GLDM share count for gold sleeve evaluation.",
+    )
     run_parser.add_argument("--dry-run", action="store_true", help="Do not send Feishu notifications.")
     return parser
 
@@ -94,6 +106,8 @@ def _run(
     dry_run: bool,
     base_monthly_rmb: int | None = None,
     review_months: int = 12,
+    current_total_portfolio_value_rmb: int | None = None,
+    current_gldm_shares: float | None = None,
 ) -> int:
     config = load_strategy_config(config_path)
     if base_monthly_rmb is not None and base_monthly_rmb <= 0:
@@ -179,6 +193,9 @@ def _run(
         gold_decision = evaluate_gold_sleeve(
             effective_config.gold_sleeve,
             reference_date=report_date,
+            current_total_portfolio_value_rmb=current_total_portfolio_value_rmb,
+            current_gldm_shares=current_gldm_shares,
+            fx_rate_cny_per_usd=fx_summary.rate_cny_per_usd,
         )
 
         report_path = report_path_for(reports_dir, report_date)
@@ -275,15 +292,32 @@ def _run(
             print(f"{effective_config.growth_ticker}：{decision.allocation.growth_rmb} RMB")
         print(f"储备金余额：{decision.reserve_cash_after_rmb} RMB")
         print(f"黄金保险仓：{gold_decision.action_label}")
+        if gold_decision.missing_inputs:
+            print(f"黄金输入状态：部分缺失（{' / '.join(gold_decision.missing_inputs)}）")
+        else:
+            print("黄金输入状态：完整")
         if gold_decision.current_gold_weight is not None:
             print(
-                f"{gold_decision.ticker}：当前 {gold_decision.current_gold_weight * 100:.2f}% / "
+                f"{gold_decision.ticker}：总资产 {gold_decision.current_total_portfolio_value_rmb} RMB / "
+                f"持仓 {gold_decision.current_gldm_shares or 0:.4f} 股 / "
+                f"价格 USD {gold_decision.current_gldm_price_usd:.2f} / "
+                f"黄金市值 {gold_decision.current_gold_value_rmb} RMB / "
+                f"当前 {gold_decision.current_gold_weight * 100:.2f}% / "
                 f"目标 {gold_decision.target_gold_weight * 100:.2f}% / "
                 f"上限 {gold_decision.max_gold_weight * 100:.2f}% / "
                 f"建议买入 {(gold_decision.recommended_buy_rmb or 0)} RMB"
             )
         if gold_decision.remaining_gap_after_buy_rmb is not None:
-            print(f"买入后距目标仍差：{gold_decision.remaining_gap_after_buy_rmb} RMB")
+            if gold_decision.projected_gold_weight_after_buy is not None:
+                remaining_pct = max(
+                    gold_decision.target_gold_weight * 100 - gold_decision.projected_gold_weight_after_buy * 100,
+                    0,
+                )
+                print(f"买入后距目标仍差：{gold_decision.remaining_gap_after_buy_rmb} RMB / {remaining_pct:.2f}%")
+            else:
+                print(f"买入后距目标仍差：{gold_decision.remaining_gap_after_buy_rmb} RMB")
+        if gold_decision.recommended_buy_shares is not None and (gold_decision.recommended_buy_rmb or 0) > 0:
+            print(f"约对应 GLDM {gold_decision.recommended_buy_shares:.4f} 股")
         print(f"黄金说明：{gold_decision.reason}")
         print(f"汇率校验状态：{validation_label(fx_summary.validation_status)}")
         print(
@@ -334,6 +368,8 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             base_monthly_rmb=args.base_monthly_rmb,
             review_months=args.review_months,
+            current_total_portfolio_value_rmb=args.current_total_portfolio_value_rmb,
+            current_gldm_shares=args.current_gldm_shares,
         )
     return 0
 

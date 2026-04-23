@@ -61,6 +61,7 @@ It also includes an optional sidecar `GLDM` gold insurance sleeve helper that is
 - `3000 RMB` 示例：`VOO 2100 / VXUS 600 / QQQM 300`
 - `6000 RMB` 示例：`VOO 4200 / VXUS 1200 / QQQM 600`
 - 黄金保险仓：`GLDM`，默认作为独立 sidecar 模块，不参与主仓月投拆分
+- 黄金仓位评估默认使用 GLDM 持仓股数来推算当前市值，不再手工填写黄金市值
 - 默认策略模式：`manual_total_per_asset_signal`
 - 储备金上限：`base_monthly_rmb * reserve_cap_multiple`
 - 市场数据源：Yahoo Finance via `yfinance`
@@ -161,7 +162,7 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - `suggest_outside_rth`
 - `gold_sleeve.enabled`
 - `gold_sleeve.current_total_portfolio_value_rmb`
-- `gold_sleeve.current_gold_value_rmb`
+- `gold_sleeve.current_gldm_shares`
 - `gold_sleeve.target_weight`
 - `gold_sleeve.max_weight`
 
@@ -177,6 +178,10 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - `workflow_dispatch` 手动运行
 - 手动传入 `base_monthly_rmb`
 - 手动传入 `review_months`
+- 手动传入 `current_total_portfolio_value_rmb`
+- 手动传入 `current_gldm_shares`
+- 手动传入 `current_total_portfolio_value_rmb`
+- 手动传入 `current_gldm_shares`
 
 行为特点：
 
@@ -185,6 +190,13 @@ python -m dca_signal_bot.cli run --base-monthly-rmb 6000 --review-months 12
 - 产物会上传，便于排查
 - 只有正式模式成功时才提交 `report` 和 `state`
 - 模拟模式会明确标记，且默认不改正式储备金状态
+
+在 GitHub Actions 的 **Run workflow** 面板里，`current_total_portfolio_value_rmb` 和 `current_gldm_shares` 都是可选输入：
+
+- `current_total_portfolio_value_rmb`：当前总资产 RMB，例如 `100000`
+- `current_gldm_shares`：当前 GLDM 持仓股数，例如 `0`、`12.5`、`25.6`
+
+如果留空，系统会继续跑市场层判断，但黄金仓仓位相关字段会显示“部分缺失/不可用”。
 
 ## Feishu Notification
 
@@ -235,6 +247,12 @@ FEISHU_KEYWORD=你的关键字
 2. 再看是否触发过热过滤
 3. 最后用简单评分判断本月是否值得补仓
 
+当前黄金市值默认由持仓股数自动推算：
+
+- `current_gold_value_usd = current_gldm_shares * GLDM_price_usd`
+- `current_gold_value_rmb = current_gold_value_usd * USDCNY_rate`
+- `current_gold_weight = current_gold_value_rmb / current_total_portfolio_value_rmb`
+
 买入金额不是固定值，而是基于目标缺口计算：
 
 - `target_gold_value = current_total_portfolio_value_rmb * target_weight`
@@ -247,6 +265,9 @@ FEISHU_KEYWORD=你的关键字
 - `GLDM` 使用 Yahoo Finance via `yfinance` 的 `GLDM` 调整后收盘价作为主判断价格代理
 - 可选宏观因子如果缺失，不会伪造数据，也不会让整个主仓月报崩溃
 - `GLDM` 只是保险仓择时补仓提示，不是自动交易
+- GitHub Actions 手动运行时可以输入 `current_total_portfolio_value_rmb` 和 `current_gldm_shares`，二者都可选填；如果没有填，报告会显示部分输入缺失并仅保留市场判断
+- `current_total_portfolio_value_rmb` 建议填最近一次可确认的总资产 RMB
+- `current_gldm_shares` 建议填券商里当前 GLDM 持仓股数，例如 `0`、`12.5`、`25.6`
 
 ## Example Output
 

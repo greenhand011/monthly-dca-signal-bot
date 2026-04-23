@@ -18,7 +18,7 @@ def _gold_config(**overrides) -> GoldSleeveConfig:
         buy_score_threshold=3.0,
         full_rebalance_months=6,
         current_total_portfolio_value_rmb=100_000,
-        current_gold_value_rmb=1_000,
+        current_gldm_shares=2.0,
         emergency_fund_ok=True,
         dxy_ticker="DXY",
         vix_ticker="^VIX",
@@ -75,8 +75,9 @@ def test_gold_no_buy_when_current_weight_at_or_above_target(monkeypatch):
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._build_gold_indicator_snapshot", lambda *args, **kwargs: _snapshot())
 
     decision = evaluate_gold_sleeve(
-        _gold_config(current_gold_value_rmb=3_500),
+        _gold_config(current_gldm_shares=5.0),
         reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
     )
 
     assert decision.should_buy is False
@@ -94,6 +95,7 @@ def test_gold_no_buy_when_overheat_filter_triggers(monkeypatch):
     decision = evaluate_gold_sleeve(
         _gold_config(),
         reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
     )
 
     assert decision.should_buy is False
@@ -109,7 +111,7 @@ def test_gold_buy_size_is_zero_when_score_below_threshold(monkeypatch):
     )
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory({}, {}))
 
-    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21))
+    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21), fx_rate_cny_per_usd=7.2)
 
     assert decision.total_score == 2.0
     assert decision.recommended_buy_rmb == 0
@@ -120,11 +122,18 @@ def test_gold_buy_size_is_25_percent_of_target_gap_for_score_3_or_4(monkeypatch)
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._build_gold_indicator_snapshot", lambda *args, **kwargs: _snapshot())
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory({}, {}))
 
-    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21))
+    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21), fx_rate_cny_per_usd=7.2)
 
     assert decision.total_score == 4.0
-    assert decision.target_gap_value_rmb == 2_000
-    assert decision.recommended_buy_rmb == 500
+    assert decision.current_total_portfolio_value_rmb == 100_000
+    assert decision.current_gldm_shares == 2.0
+    assert decision.current_gldm_price_usd == 100.0
+    assert decision.current_gold_value_usd == 200.0
+    assert decision.current_gold_value_rmb == 1_440
+    assert decision.current_gold_weight == 0.0144
+    assert decision.target_gap_value_rmb == 1_560
+    assert decision.recommended_buy_rmb == 390
+    assert round(decision.recommended_buy_shares or 0, 4) == 0.5417
 
 
 def test_gold_buy_size_is_50_percent_of_target_gap_for_score_5_or_6(monkeypatch):
@@ -135,10 +144,10 @@ def test_gold_buy_size_is_50_percent_of_target_gap_for_score_5_or_6(monkeypatch)
     }
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory(macro_data, {}))
 
-    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21))
+    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21), fx_rate_cny_per_usd=7.2)
 
     assert decision.total_score == 5.0
-    assert decision.recommended_buy_rmb == 1_000
+    assert decision.recommended_buy_rmb == 780
 
 
 def test_gold_buy_size_is_full_target_gap_for_score_at_or_above_7(monkeypatch):
@@ -155,10 +164,11 @@ def test_gold_buy_size_is_full_target_gap_for_score_at_or_above_7(monkeypatch):
     decision = evaluate_gold_sleeve(
         _gold_config(central_bank_support=0.5, gold_etf_flow_support=0.5),
         reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
     )
 
     assert decision.total_score == 7.0
-    assert decision.recommended_buy_rmb == 2_000
+    assert decision.recommended_buy_rmb == 1_560
     assert decision.projected_gold_weight_after_buy <= decision.max_gold_weight
 
 
@@ -168,16 +178,18 @@ def test_gold_buy_size_is_based_on_target_gap_not_fixed_amount(monkeypatch):
     monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory({}, {}))
 
     decision_small_gap = evaluate_gold_sleeve(
-        _gold_config(current_gold_value_rmb=2_000),
+        _gold_config(current_gldm_shares=1.0),
         reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
     )
     decision_large_gap = evaluate_gold_sleeve(
-        _gold_config(current_gold_value_rmb=0),
+        _gold_config(current_gldm_shares=0.0),
         reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
     )
 
-    assert decision_small_gap.target_gap_value_rmb == 1_000
-    assert decision_small_gap.recommended_buy_rmb == 250
+    assert decision_small_gap.target_gap_value_rmb == 2_280
+    assert decision_small_gap.recommended_buy_rmb == 570
     assert decision_large_gap.target_gap_value_rmb == 3_000
     assert decision_large_gap.recommended_buy_rmb == 750
 
@@ -190,9 +202,48 @@ def test_gold_optional_macro_inputs_can_be_unavailable_without_crashing(monkeypa
         _macro_lookup_factory({}, {"DXY": "DXY failed", "REALYIELD": "real yield failed", "^VIX": "vix failed", "SPY": "spy failed"}),
     )
 
-    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21))
+    decision = evaluate_gold_sleeve(_gold_config(), reference_date=date(2026, 4, 21), fx_rate_cny_per_usd=7.2)
 
     assert isinstance(decision, GoldSleeveDecision)
     assert decision.validation_status == "PASS"
     assert decision.optional_data_notes
-    assert decision.recommended_buy_rmb == 500
+    assert decision.recommended_buy_rmb == 390
+
+
+def test_gold_partial_inputs_do_not_crash_but_hide_position_dependent_outputs(monkeypatch):
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_required_history", lambda *args, **kwargs: pd.DataFrame({"close": [1.0]}))
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._build_gold_indicator_snapshot", lambda *args, **kwargs: _snapshot())
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory({}, {}))
+
+    decision = evaluate_gold_sleeve(
+        _gold_config(current_total_portfolio_value_rmb=None, current_gldm_shares=2.0),
+        reference_date=date(2026, 4, 21),
+        fx_rate_cny_per_usd=7.2,
+    )
+
+    assert decision.decision_status == "UNAVAILABLE"
+    assert decision.should_buy is False
+    assert "current_total_portfolio_value_rmb" in decision.missing_inputs
+    assert decision.current_gldm_shares == 2.0
+    assert decision.current_gold_value_usd == 200.0
+    assert decision.current_gold_value_rmb == 1_440
+    assert decision.current_gold_weight is None
+    assert decision.target_gap_value_rmb is None
+    assert decision.recommended_buy_rmb is None
+
+
+def test_gold_workflow_input_overrides_config_defaults(monkeypatch):
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_required_history", lambda *args, **kwargs: pd.DataFrame({"close": [1.0]}))
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._build_gold_indicator_snapshot", lambda *args, **kwargs: _snapshot())
+    monkeypatch.setattr("dca_signal_bot.gold_sleeve._fetch_optional_history", _macro_lookup_factory({}, {}))
+
+    decision = evaluate_gold_sleeve(
+        _gold_config(current_total_portfolio_value_rmb=50_000, current_gldm_shares=1.0),
+        reference_date=date(2026, 4, 21),
+        current_total_portfolio_value_rmb=100_000,
+        current_gldm_shares=2.0,
+        fx_rate_cny_per_usd=7.2,
+    )
+
+    assert decision.current_total_portfolio_value_rmb == 100_000
+    assert decision.current_gldm_shares == 2.0

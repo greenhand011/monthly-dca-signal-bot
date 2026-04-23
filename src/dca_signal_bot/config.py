@@ -61,8 +61,9 @@ class GoldSleeveConfig:
     monthly_check_enabled: bool = True
     buy_score_threshold: float = 3.0
     full_rebalance_months: int = 6
-    current_total_portfolio_value_rmb: int = 0
-    current_gold_value_rmb: int = 0
+    current_total_portfolio_value_rmb: int | None = None
+    current_gldm_shares: float | None = None
+    current_gold_value_rmb: int | None = None
     emergency_fund_ok: bool = True
     overheat_rsi_max: float = 72.0
     overheat_ma200_ratio_max: float = 1.15
@@ -167,9 +168,11 @@ def _validate_gold_sleeve_config(config: GoldSleeveConfig) -> None:
         raise ValueError("gold_sleeve.buy_score_threshold must be >= 0")
     if config.full_rebalance_months < 1:
         raise ValueError("gold_sleeve.full_rebalance_months must be >= 1")
-    if config.current_total_portfolio_value_rmb < 0:
+    if config.current_total_portfolio_value_rmb is not None and config.current_total_portfolio_value_rmb < 0:
         raise ValueError("gold_sleeve.current_total_portfolio_value_rmb must be >= 0")
-    if config.current_gold_value_rmb < 0:
+    if config.current_gldm_shares is not None and config.current_gldm_shares < 0:
+        raise ValueError("gold_sleeve.current_gldm_shares must be >= 0")
+    if config.current_gold_value_rmb is not None and config.current_gold_value_rmb < 0:
         raise ValueError("gold_sleeve.current_gold_value_rmb must be >= 0")
     if config.overheat_rsi_max <= 0:
         raise ValueError("gold_sleeve.overheat_rsi_max must be > 0")
@@ -187,6 +190,14 @@ def _optional_float(value: Any) -> float | None:
     if isinstance(value, dict) and not value:
         return None
     return float(value)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in ("", None):
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    return int(value)
 
 
 def _deep_merge(default: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
@@ -294,8 +305,9 @@ def load_strategy_config(path: str | Path) -> StrategyConfig:
         monthly_check_enabled=bool(gold_raw.get("monthly_check_enabled", True)),
         buy_score_threshold=float(gold_raw.get("buy_score_threshold", 3.0)),
         full_rebalance_months=int(gold_raw.get("full_rebalance_months", 6)),
-        current_total_portfolio_value_rmb=int(gold_raw.get("current_total_portfolio_value_rmb", 0)),
-        current_gold_value_rmb=int(gold_raw.get("current_gold_value_rmb", 0)),
+        current_total_portfolio_value_rmb=_optional_int(gold_raw.get("current_total_portfolio_value_rmb")),
+        current_gldm_shares=_optional_float(gold_raw.get("current_gldm_shares")),
+        current_gold_value_rmb=_optional_int(gold_raw.get("current_gold_value_rmb")),
         emergency_fund_ok=bool(gold_raw.get("emergency_fund_ok", True)),
         overheat_rsi_max=float(gold_raw.get("overheat_rsi_max", 72.0)),
         overheat_ma200_ratio_max=float(gold_raw.get("overheat_ma200_ratio_max", 1.15)),

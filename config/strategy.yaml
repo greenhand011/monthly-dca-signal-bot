@@ -24,8 +24,8 @@ gold_sleeve:
   monthly_check_enabled: true
   buy_score_threshold: 3.0
   full_rebalance_months: 6
-  current_total_portfolio_value_rmb: 0
-  current_gold_value_rmb: 0
+  current_total_portfolio_value_rmb: null
+  current_gldm_shares: null
   emergency_fund_ok: true
   overheat_rsi_max: 72
   overheat_ma200_ratio_max: 1.15

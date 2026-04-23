@@ -85,6 +85,23 @@ def _format_gold_buy_line(gold_decision: GoldSleeveDecision, fx_summary: FxConve
     return f"{buy_rmb} RMB（{usd_text}）"
 
 
+def _format_shares(value: float | None, *, precision: int = 4) -> str:
+    if value is None:
+        return "不可用"
+    text = f"{value:.{precision}f}"
+    return text.rstrip("0").rstrip(".")
+
+
+def _format_gold_market_value(gold_decision: GoldSleeveDecision) -> str:
+    if gold_decision.current_gold_value_rmb is not None:
+        if gold_decision.current_gold_value_usd is not None:
+            return f"{gold_decision.current_gold_value_rmb} RMB（约 USD {gold_decision.current_gold_value_usd:.2f}）"
+        return f"{gold_decision.current_gold_value_rmb} RMB"
+    if gold_decision.current_gold_value_usd is not None:
+        return f"约 USD {gold_decision.current_gold_value_usd:.2f}（RMB 不可用）"
+    return "不可用"
+
+
 def build_summary_text(
     *,
     config: StrategyConfig,
@@ -171,22 +188,40 @@ def build_summary_text(
         )
 
     if gold_decision is not None:
+        if gold_decision.missing_inputs:
+            missing_text = " / ".join(gold_decision.missing_inputs)
+        else:
+            missing_text = "完整"
         lines.extend(
             [
                 "",
                 "黄金保险仓判定：",
                 f"- 标的：{gold_decision.ticker}",
+                f"- 当前总资产：{gold_decision.current_total_portfolio_value_rmb} RMB"
+                if gold_decision.current_total_portfolio_value_rmb is not None
+                else "- 当前总资产：不可用",
+                f"- 当前 GLDM 持仓：{_format_shares(gold_decision.current_gldm_shares)} 股"
+                if gold_decision.current_gldm_shares is not None
+                else "- 当前 GLDM 持仓：不可用",
+                f"- 当前 GLDM 价格：USD {gold_decision.current_gldm_price_usd:.2f}"
+                if gold_decision.current_gldm_price_usd is not None
+                else "- 当前 GLDM 价格：不可用",
+                f"- 当前黄金市值：{_format_gold_market_value(gold_decision)}",
                 f"- 当前黄金仓位：{gold_decision.current_gold_weight * 100:.2f}%"
                 if gold_decision.current_gold_weight is not None
                 else "- 当前黄金仓位：不可用",
                 f"- 目标黄金仓位：{gold_decision.target_gold_weight * 100:.2f}%",
                 f"- 黄金上限仓位：{gold_decision.max_gold_weight * 100:.2f}%",
+                f"- 输入状态：{missing_text}",
                 f"- 是否触发过热过滤：{yes_no(bool(gold_decision.overheat_triggered))}"
                 if gold_decision.overheat_triggered is not None
                 else "- 是否触发过热过滤：不可用",
                 f"- 综合评分：{gold_decision.total_score:.1f}" if gold_decision.total_score is not None else "- 综合评分：不可用",
                 f"- 建议：{gold_decision.action_label}",
                 f"- 建议买入金额：{_format_gold_buy_line(gold_decision, fx_summary)}",
+                f"- 约对应 GLDM：{_format_shares(gold_decision.recommended_buy_shares)} 股"
+                if gold_decision.recommended_buy_shares is not None and (gold_decision.recommended_buy_rmb or 0) > 0
+                else "- 约对应 GLDM：不可用",
                 f"- 买入后黄金仓位：{gold_decision.projected_gold_weight_after_buy * 100:.2f}%"
                 if gold_decision.projected_gold_weight_after_buy is not None
                 else "- 买入后黄金仓位：不可用",
