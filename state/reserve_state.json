@@ -1,6 +1,6 @@
 {
   "reserve_cash_rmb": 0,
-  "last_run_at": "2026-04-30T10:40:01.156824+00:00",
-  "last_status": "TACTICAL_REBALANCE",
+  "last_run_at": "2026-05-01T04:44:22.071880+00:00",
+  "last_status": "BASELINE_ONLY",
   "last_recommendation_total_rmb": 3000
 }
